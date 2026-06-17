@@ -1,0 +1,27 @@
+# --- Python & Environment ---
+venv/
+__pycache__/
+*.pyc
+
+# --- Local Databases & User Settings ---
+linkweave.db
+config.json
+activity_log.json
+app_settings.json
+AUTO-PY-TO-EXE-CONF-laptop.json
+AUTO-PY-TO-EXE-CONF.json
+
+# --- Build & Distribution (PyInstaller) ---
+build/
+dist/
+output/
+FlowDeck.spec
+main.spec
+upx.exe
+
+# --- Temporary & Backup Folders ---
+
+backups/
+
+# --- Miscellaneous ---
+

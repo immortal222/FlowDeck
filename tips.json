@@ -1,0 +1,106 @@
+{
+    "el": [
+        {
+            "id": 1,
+            "title": "Γρήγορη Εκκίνηση",
+            "text": "Μπορείς να βάλεις τις πιο συχνές εφαρμογές σου στα 'Favorites' για να εμφανίζονται κατευθείαν στο Dashboard."
+        },
+        {
+            "id": 2,
+            "title": "Έλεγχος Updates",
+            "text": "Το FlowDeck ελέγχει αυτόματα για updates στο background κάθε φορά που ανοίγει η εφαρμογή."
+        },
+        {
+            "id": 3,
+            "title": "Chocolatey & Scoop",
+            "text": "Αν μια εφαρμογή κολλήσει, δοκίμασε να ελέγξεις αν το package name είναι σωστό στις ρυθμίσεις της."
+        },
+        {
+            "id": 4,
+            "title": "Καθαρισμός Activity Log",
+            "text": "Το Activity Log κρατάει αυτόματα μόνο τα τελευταία 10 events για να παραμένει το UI ελαφρύ."
+        },
+        {
+            "id": 5,
+            "title": "Δεξί Κλικ για Επιλογές",
+            "text": "Κάνοντας δεξί κλικ πάνω σε οποιαδήποτε κάρτα εφαρμογής, ανοίγει το κρυφό μενού με επιλογές απεγκατάστασης."
+        },
+        {
+            "id": 6,
+            "title": "Dark Mode",
+            "text": "Το interface είναι σχεδιασμένο να προστατεύει τα μάτια σου. Μπορείς να αλλάξεις στυλ από τα Settings."
+        },
+        {
+            "id": 7,
+            "title": "Χειροκίνητη Προσθήκη",
+            "text": "Αν μια εφαρμογή δεν υπάρχει στο Scoop ή στο Choco, μπορείς να την προσθέσεις ως 'Manual' βάζοντας το exe της."
+        },
+        {
+            "id": 8,
+            "title": "Portable Εφαρμογές",
+            "text": "Προτίμησε τα '.portable' πακέτα στο Chocolatey για να μην λερώνεις το Windows Registry σου."
+        },
+        {
+            "id": 9,
+            "title": "Αυτόματη Ανανέωση",
+            "text": "Κάθε φορά που επιστρέφεις στο Dashboard, οι πληροφορίες των αγαπημένων σου εφαρμογών ανανεώνονται live."
+        },
+        {
+            "id": 10,
+            "title": "Κατάσταση Σφάλματος",
+            "text": "Αν ένα launch αποτύχει, το Timeline θα κοκκινίσει και θα σου δείξει αμέσως το σφάλμα."
+        }
+    ],
+    "en": [
+        {
+            "id": 1,
+            "title": "Quick Launch",
+            "text": "You can add your most frequent apps to 'Favorites' to appear directly on the Dashboard."
+        },
+        {
+            "id": 2,
+            "title": "Update Check",
+            "text": "FlowDeck automatically checks for updates in the background every time the app opens."
+        },
+        {
+            "id": 3,
+            "title": "Chocolatey & Scoop",
+            "text": "If an app hangs, try checking if the package name is correct in its settings."
+        },
+        {
+            "id": 4,
+            "title": "Clear Activity Log",
+            "text": "The Activity Log automatically keeps only the last 10 events to keep the UI lightweight."
+        },
+        {
+            "id": 5,
+            "title": "Right Click for Options",
+            "text": "Right-clicking on any app card opens the hidden menu with uninstall options."
+        },
+        {
+            "id": 6,
+            "title": "Dark Mode",
+            "text": "The interface is designed to protect your eyes. You can change styles from Settings."
+        },
+        {
+            "id": 7,
+            "title": "Manual Addition",
+            "text": "If an app doesn't exist in Scoop or Choco, you can add it as 'Manual' by providing its exe."
+        },
+        {
+            "id": 8,
+            "title": "Portable Applications",
+            "text": "Prefer '.portable' packages in Chocolatey to avoid cluttering your Windows Registry."
+        },
+        {
+            "id": 9,
+            "title": "Auto Refresh",
+            "text": "Every time you return to the Dashboard, your favorite apps' info is updated live."
+        },
+        {
+            "id": 10,
+            "title": "Error State",
+            "text": "If a launch fails, the Timeline will turn red and show you the error immediately."
+        }
+    ]
+}
