@@ -26,7 +26,7 @@ FlowDeck rejects traditional, system-wide software installations. Everything is 
 ### 2. 🧠 Smart Installation Wizard
 The built-in installation wizard dynamically recognizes and automates the setup of different file formats:
 * **ZIP / 7Z Archives:** Automatically parses the file name, guesses the application name and version using advanced regex matching, extracts the contents, and guides the user to select the primary executable (`.exe`).
-* **Official PortableApps (`.paf.exe`) Installers:** Applies smart automation. It copies the installer to your portable directory so that the target paths are automatically pre-configured. It silently waits for the installation to finish, reads the `appinfo.ini` file to extract app metadata (name, version), and automatically deletes the temporary installer file to save disk space.
+* **Official PortableApps (`.paf.exe`) Installers:** Applies smart automation. It copies the installer to your portable directory. It waits user to make the installation, reads the `appinfo.ini` file to extract app metadata (name, version), and automatically deletes the temporary installer file to save disk space.
 
 ### 🌐 3. Online Repositories Integration (Scoop API & Chocolatey)
 Once an application is detected, FlowDeck communicates with the **Scoop API** and local indices in the background. It matches human-readable names to official app IDs and retrieves rich online metadata:
@@ -77,7 +77,7 @@ FlowDeck/
   1.Clone the repository:
 
 ```
-git clone [https://github.com/your-username/FlowDeck.git](https://github.com/your-username/FlowDeck.git)
+git clone [https://github.com/immortal222/FlowDeck.git](https://github.com/immortal222/FlowDeck.git)
 cd FlowDeck
 ```
 
