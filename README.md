@@ -77,7 +77,7 @@ FlowDeck/
   1.Clone the repository:
 
 ```
-git clone [https://github.com/immortal222/FlowDeck.git](https://github.com/immortal222/FlowDeck.git)
+git clone https://github.com/immortal222/FlowDeck.git
 cd FlowDeck
 ```
 
