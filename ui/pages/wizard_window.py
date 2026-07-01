@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import webbrowser
 import zipfile
+import pefile
 
 import requests
 import win32com.client
@@ -13,90 +14,69 @@ from PyQt5.QtCore import QEvent, QObject, QSize, Qt
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import (QApplication, QDialog, QFileDialog, QHBoxLayout,
                              QInputDialog, QLabel, QLineEdit, QMessageBox,
-                             QPushButton, QVBoxLayout)
+                             QPushButton, QVBoxLayout, QComboBox)
 
 from core.api.chocolatey_api import ChocolateyAPI
 from core.api.scoop_api import ScoopAPI
 from core.services.installer import AppInstaller
 from core.services.path_manager import PathManager
-from core.utils import get_portable_apps_metadata, is_internet_available
+from core.utils import get_portable_apps_metadata, is_internet_available, get_pe_version, get_pe_name
 from locales.localization import _
 from locales.ui_localizer import localize_wizard_page
 from ui.styles.styles import DIALOG_STYLE, DIALOG_LIGHT_STYLE
 
 
-class NameConfirmDialog(QDialog):
-    """Dialog for confirming or editing the detected application name."""
+class UnifiedInstallDialog(QDialog):
+    """Single unified dialog for confirming App Name, Version, and Executable."""
 
-    def __init__(self, detected_name, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle(_("wiz_step2_title", "Step 2: Application Name"))
-        self.setMinimumWidth(350)
-
-        # Apply dynamic theme styling
-        theme = parent.settings_controller.config.get("theme", "Modern Dark")
-        style = DIALOG_LIGHT_STYLE if theme == "Modern Light" else DIALOG_STYLE
-        self.setStyleSheet(style)
-
-        layout = QVBoxLayout(self)
-        layout.addWidget(
-            QLabel(_("wiz_step2_msg", "The following name was detected. Is it correct?")))
-        self.name_input = QLineEdit(detected_name)
-        layout.addWidget(self.name_input)
-
-        btn_layout = QHBoxLayout()
-        self.btn_next = QPushButton(_("wiz_step2_next", "Next"))
-        self.btn_next.setObjectName("primaryButton")
-        self.btn_cancel = QPushButton(_("wiz_step2_cancel", "Cancel"))
-
-        self.btn_next.clicked.connect(self.accept)
-        self.btn_cancel.clicked.connect(self.reject)
-
-        btn_layout.addStretch()
-        btn_layout.addWidget(self.btn_next)
-        btn_layout.addWidget(self.btn_cancel)
-        layout.addLayout(btn_layout)
-
-    def get_name(self):
-        return self.name_input.text().strip()
-
-
-class VersionConfirmDialog(QDialog):
-    """Dialog for user to confirm or override the application version."""
-
-    def __init__(self, message, initial_ver, scoop_ver, parent=None):
+    def __init__(self, app_name, version, exes, scoop_ver, parent=None):
         super().__init__(parent)
         self.setWindowTitle(
-            _("wiz_step5_title", "Step 5: Confirm Version"))
+            _("wiz_confirm_title", "Confirm Installation Details"))
         self.setMinimumWidth(450)
 
-        # Dynamic styling
-        theme = parent.settings_controller.config.get("theme", "Modern Dark")
+        # Apply dynamic theme styling
+        theme = "Modern Dark"
+        if hasattr(parent, 'settings_controller') and parent.settings_controller:
+            theme = parent.settings_controller.config.get(
+                "theme", "Modern Dark")
         style = DIALOG_LIGHT_STYLE if theme == "Modern Light" else DIALOG_STYLE
         self.setStyleSheet(style)
 
         layout = QVBoxLayout(self)
-        self.msg_label = QLabel(message)
-        self.msg_label.setWordWrap(True)
-        layout.addWidget(self.msg_label)
 
-        input_layout = QHBoxLayout()
-        self.ver_input = QLineEdit(initial_ver)
-        input_layout.addWidget(self.ver_input)
+        # 1. App Name
+        layout.addWidget(QLabel(_("wiz_step2_msg", "Application Name:")))
+        self.name_input = QLineEdit(app_name)
+        layout.addWidget(self.name_input)
+
+        # 2. Version
+        layout.addWidget(QLabel(_("wiz_step5_title", "Version:")))
+        ver_layout = QHBoxLayout()
+        self.ver_input = QLineEdit(version)
+        ver_layout.addWidget(self.ver_input)
 
         if scoop_ver:
             self.btn_set_scoop = QPushButton(
-                _("wiz_step5_set_scoop", "← Use Scoop"))
+                _("wiz_step5_set_scoop", f"← Use Scoop ({scoop_ver})"))
             self.btn_set_scoop.clicked.connect(
                 lambda: self.ver_input.setText(scoop_ver))
-            input_layout.addWidget(self.btn_set_scoop)
+            ver_layout.addWidget(self.btn_set_scoop)
+        layout.addLayout(ver_layout)
 
-        layout.addLayout(input_layout)
+        # 3. Executable Selection
+        layout.addWidget(
+            QLabel(_("wiz_title_select_exe", "Select Executable:")))
+        self.exe_combo = QComboBox()
+        self.exe_combo.addItems(exes)
+        layout.addWidget(self.exe_combo)
 
+        # Buttons
         btn_layout = QHBoxLayout()
-        self.btn_next = QPushButton(_("wiz_next", "Next"))
+        self.btn_next = QPushButton(_("wiz_next", "Install"))
         self.btn_next.setObjectName("primaryButton")
         self.btn_cancel = QPushButton(_("wiz_cancel", "Cancel"))
+
         self.btn_next.clicked.connect(self.accept)
         self.btn_cancel.clicked.connect(self.reject)
 
@@ -105,8 +85,12 @@ class VersionConfirmDialog(QDialog):
         btn_layout.addWidget(self.btn_cancel)
         layout.addLayout(btn_layout)
 
-    def get_version(self):
-        return self.ver_input.text().strip()
+    def get_data(self):
+        return (
+            self.name_input.text().strip(),
+            self.ver_input.text().strip(),
+            self.exe_combo.currentText()
+        )
 
 
 class WizardController(QObject):
@@ -498,7 +482,23 @@ class WizardController(QObject):
             self.ui.installButton.setProperty("paf_exe_path", final_exe_path)
 
             self.log(f"✨ Metadata: {app_name} v{app_version}")
-            self.step_4_and_5_scoop_check(app_name)
+
+            # Check scoop metadata directly
+            scoop_data = None
+            if is_internet_available():
+                scoop_data = self.scoop.search_app(app_name)
+                if not isinstance(scoop_data, dict):
+                    scoop_data = None
+
+            self.current_app_data = scoop_data
+            scoop_ver = scoop_data.get('version') if scoop_data else None
+            self.update_sidebar(app_name, scoop_data, app_version)
+
+            self.log(
+                f"📦 Auto-confirming version for PAF: {app_version}. Continuing...")
+            latest_ver = scoop_ver if scoop_ver else app_version
+            self._finalize_app_install(
+                app_name, latest_folder, final_exe_path, app_version, latest_ver)
         else:
             self.log("⚠️ No metadata found in appinfo.ini.")
 
@@ -524,209 +524,152 @@ class WizardController(QObject):
         raw_name = re.sub(
             r'(?i)[-_\s]*(portable|setup|installer|bin|x64|x86|win64)$', '', raw_name)
         detected_name = raw_name.replace("-", " ").replace("_", " ").title()
-        self.update_sidebar(detected_name, None, self.detected_version_regex)
-        self.step_2_name_check(detected_name)
 
-    def step_2_name_check(self, detected_name):
-        """Prompts user to confirm the detected application name."""
-        dialog = NameConfirmDialog(detected_name, self.main_window)
-        if dialog.exec_() == QDialog.Accepted:
-            app_name = dialog.get_name()
-            self.ui.appNameInput.setText(app_name)
-            self.log(
-                f"{_('wiz_log_name_confirmed', 'Name confirmed')}: {app_name}")
-            self.step_4_and_5_scoop_check(app_name)
-        else:
-            self.log(_("wiz_log_install_cancelled",
-                     "Installation cancelled by user."))
+        self.update_sidebar(detected_name, None, _(
+            "wiz_waiting", "Waiting..."))
 
-    def step_4_and_5_scoop_check(self, app_name):
-        """Checks online repositories for metadata and version verification."""
-        self.log(_("wiz_log_searching_scoop",
-                 "Searching Scoop for '{app_name}' info...").format(app_name=app_name))
+        # 1. EXTRACT TO TEMP FOLDER FIRST
+        self.log(_("wiz_log_extracting_to",
+                 "Starting extraction to temporary folder..."))
+        temp_target_name = detected_name + "_temp"
+        temp_target = os.path.join(self.portable_root, temp_target_name)
+        extracted_folder = installer.install_from_zip(
+            self.current_file_path, temp_target_name)
 
+        if not extracted_folder:
+            self.log(_("wiz_err_extract_failed", "ERROR: Extraction failed."))
+            return
+
+        # 2. CHOCOLATEY SFX CHECK
+        tools_dir = os.path.join(extracted_folder, "tools")
+        if os.path.exists(tools_dir):
+            file_32 = os.path.join(tools_dir, "7zip_x32.exe")
+            file_64 = os.path.join(tools_dir, "7zip_x64.exe")
+
+            if os.path.exists(file_32) or os.path.exists(file_64):
+                self.log(
+                    _("wiz_log_choc_sfx", "📦 Chocolatey SFX detected. Internal extraction with 7za..."))
+
+                is_64bit = platform.machine().endswith(
+                    '64') or os.environ.get("PROCESSOR_ARCHITEW6432")
+                target_sfx = file_64 if (
+                    is_64bit and os.path.exists(file_64)) else file_32
+
+                if os.path.exists(target_sfx):
+                    try:
+                        seven_za_path = PathManager.get_bin_path("7za.exe")
+
+                        if not seven_za_path:
+                            raise FileNotFoundError(
+                                _("wiz_err_no_7za", "7za.exe not found in project!"))
+
+                        target_dir_abs = os.path.abspath(extracted_folder)
+                        target_sfx_abs = os.path.abspath(target_sfx)
+
+                        subprocess.run(
+                            [seven_za_path, "x", target_sfx_abs, f"-o{target_dir_abs}", "-y"], check=True)
+
+                        shutil.rmtree(tools_dir, ignore_errors=True)
+                        self.log(_("wiz_log_internal_extract_ok",
+                                 "✨ Internal extraction completed successfully!"))
+                    except Exception as e:
+                        self.log(_("wiz_log_internal_extract_err",
+                                 "❌ Internal extraction error: {error}").format(error=e))
+
+        # 3. FIND EXES & SORT
+        self.log(_("wiz_log_searching_exes",
+                 "Extraction finished. Searching for executables (.exe)..."))
+        exes = []
+        for root, subdirs, files in os.walk(extracted_folder):
+            for f in files:
+                if f.lower().endswith('.exe'):
+                    exes.append(os.path.join(root, f))
+
+        if not exes:
+            self.log(_("wiz_err_no_exe_found",
+                     "ERROR: No .exe files found in the archive!"))
+            shutil.rmtree(extracted_folder, ignore_errors=True)
+            return
+
+        def sort_key(exe_path):
+            fn = os.path.basename(exe_path).lower()
+            if fn == "7zfm.exe":
+                return 2
+            if detected_name.lower().replace("++", "").replace(" ", "") in fn:
+                return 1
+            return 0
+
+        exes.sort(key=sort_key, reverse=True)
+        clean_names = [os.path.relpath(e, extracted_folder) for e in exes]
+
+        # 4. GET PEFILE VERSION (New Feature)
+        pe_version = get_pe_version(exes[0])
+        if pe_version:
+            self.log(f"🔎 Internal EXE Version found (pefile): {pe_version}")
+
+        initial_ver = pe_version if pe_version else (
+            self.detected_version_regex if self.detected_version_regex else "1.0")
+
+        # 4.1 GET PEFILE NAME (New Feature)
+        pe_name = get_pe_name(exes[0])
+        if pe_name:
+            self.log(f"🔎 Internal EXE Name found (pefile): {pe_name}")
+
+        detected_name = pe_name if pe_name else detected_name
+        self.ui.appNameInput.setText(detected_name)
+
+        print(f"Detected Name: {detected_name}, PE Name: {pe_name}")
+
+        # 5. SCOOP CHECK
+        self.log(_("wiz_log_searching_scoop", "Searching Scoop for '{app_name}' info...").format(
+            app_name=detected_name))
         scoop_data = None
         if is_internet_available():
-            scoop_data = self.scoop.search_app(app_name)
+            scoop_data = self.scoop.search_app(detected_name)
             if not isinstance(scoop_data, dict):
                 scoop_data = None
-        else:
-            self.log(_("upd_no_internet_text",
-                     "Unable to connect to the internet."))
 
         scoop_ver = scoop_data.get('version') if scoop_data else None
         self.current_app_data = scoop_data
-
-        self.update_sidebar(app_name, scoop_data, self.detected_version_regex)
-
-        is_paf = self.current_file_path.lower().endswith(
-            '.paf') or self.current_file_path.lower().endswith('.paf.exe')
-
-        if is_paf:
-            if scoop_ver:
-                self.log(_("wiz_log_scoop_match", "Match found in Scoop (Version: {scoop_ver})").format(
-                    scoop_ver=scoop_ver))
-
-            final_version = self.detected_version_regex if self.detected_version_regex else "1.0"
-            self.log(
-                f"📦 Auto-confirming version for PAF: {final_version}. Continuing...")
-
-            self.ui.installButton.setProperty("final_version", final_version)
-            self.step_6_and_7_install()
-            return
+        self.update_sidebar(detected_name, scoop_data, initial_ver)
 
         if scoop_ver:
             self.log(_("wiz_log_scoop_match", "Match found in Scoop (Version: {scoop_ver})").format(
                 scoop_ver=scoop_ver))
-
-            if self.detected_version_regex:
-                msg = _("wiz_msg_newer_ver_regex", "Newer version: {scoop_ver}. Found in file: {detected_ver}. Is this correct?").format(
-                    scoop_ver=scoop_ver,
-                    detected_ver=self.detected_version_regex
-                )
-                initial_ver = self.detected_version_regex
-            else:
-                msg = _("wiz_msg_newer_ver_no_regex", "Newer version: {scoop_ver}. No version found in filename. Is this correct?").format(
-                    scoop_ver=scoop_ver
-                )
-                initial_ver = scoop_ver
         else:
             self.log(_("wiz_log_scoop_not_found",
                      "Application not found in Scoop API."))
-            msg = _("wiz_msg_scoop_not_found",
-                    "No version found in database.")
-            initial_ver = self.detected_version_regex if self.detected_version_regex else "1.0"
 
-        dialog = VersionConfirmDialog(
-            msg, initial_ver, scoop_ver, self.main_window)
+        # 6. SHOW SINGLE UNIFIED DIALOG (New Feature)
+        dialog = UnifiedInstallDialog(
+            detected_name, initial_ver, clean_names, scoop_ver, self.main_window)
         if dialog.exec_() == QDialog.Accepted:
-            final_version = dialog.get_version()
+            final_name, final_version, final_exe_rel = dialog.get_data()
+
+            # Rename Temp Folder to Final Name
+            final_target = os.path.join(self.portable_root, final_name)
+            if os.path.abspath(extracted_folder) != os.path.abspath(final_target):
+                if os.path.exists(final_target):
+                    shutil.rmtree(final_target, ignore_errors=True)
+                os.rename(extracted_folder, final_target)
+            else:
+                final_target = extracted_folder
+
+            final_exe_path = os.path.abspath(
+                os.path.join(final_target, final_exe_rel))
+            latest_ver = scoop_ver if scoop_ver else final_version
+
+            self.ui.appNameInput.setText(final_name)
+            self.ui.installButton.setProperty("final_version", final_version)
+
             self.log(_("wiz_log_version_set", "Version set: {final_version}").format(
                 final_version=final_version))
-            self.ui.installButton.setProperty("final_version", final_version)
-            self.step_6_and_7_install()
+            self._finalize_app_install(
+                final_name, final_target, final_exe_path, final_version, latest_ver)
         else:
-            self.log(_("wiz_log_install_cancelled_version",
-                     "Installation cancelled at version step."))
-
-    def step_6_and_7_install(self):
-        """Executes extraction and executable selection."""
-        app_name = self.ui.appNameInput.text().strip()
-        version = self.ui.installButton.property("final_version") or "1.0"
-
-        latest_ver = version
-        if hasattr(self, 'current_app_data') and isinstance(self.current_app_data, dict):
-            latest_ver = self.current_app_data.get('version', version)
-
-        full_target_path = os.path.join(self.portable_root, app_name)
-
-        is_paf = self.current_file_path.lower().endswith(
-            '.paf') or self.current_file_path.lower().endswith('.paf.exe')
-
-        if is_paf:
-            self.log(
-                "📦 File is .paf and already installed. Skipping extraction...")
-            folders = [os.path.join(self.portable_root, d) for d in os.listdir(
-                self.portable_root) if os.path.isdir(os.path.join(self.portable_root, d))]
-            if folders:
-                extracted_folder = max(folders, key=os.path.getmtime)
-            else:
-                extracted_folder = full_target_path
-
-            final_exe_path = self.ui.installButton.property("paf_exe_path")
-            if final_exe_path:
-                self._finalize_app_install(
-                    app_name, extracted_folder, final_exe_path, version, latest_ver)
-                return
-        else:
-
-            self.log(_("wiz_log_extracting_to",
-                       "Starting extraction to: {target_dir}...").format(target_dir=full_target_path))
-            installer = AppInstaller(self.portable_root)
-            extracted_folder = installer.install_from_zip(
-                self.current_file_path, app_name)
-
-        if extracted_folder:
-            # Handle Chocolatey SFX extraction in the root folder
-            tools_dir = os.path.join(extracted_folder, "tools")
-            if os.path.exists(tools_dir):
-                file_32 = os.path.join(tools_dir, "7zip_x32.exe")
-                file_64 = os.path.join(tools_dir, "7zip_x64.exe")
-
-                if os.path.exists(file_32) or os.path.exists(file_64):
-                    self.log(
-                        _("wiz_log_choc_sfx", "📦 Chocolatey SFX detected. Internal extraction with 7za..."))
-
-                    is_64bit = platform.machine().endswith(
-                        '64') or os.environ.get("PROCESSOR_ARCHITEW6432")
-                    target_sfx = file_64 if (
-                        is_64bit and os.path.exists(file_64)) else file_32
-
-                    if os.path.exists(target_sfx):
-                        try:
-                            seven_za_path = PathManager.get_bin_path("7za.exe")
-
-                            if not seven_za_path:
-                                raise FileNotFoundError(
-                                    _("wiz_err_no_7za", "7za.exe not found in project!"))
-
-                            target_dir_abs = os.path.abspath(extracted_folder)
-                            target_sfx_abs = os.path.abspath(target_sfx)
-
-                            subprocess.run(
-                                [seven_za_path, "x", target_sfx_abs, f"-o{target_dir_abs}", "-y"], check=True)
-
-                            shutil.rmtree(tools_dir, ignore_errors=True)
-                            self.log(_("wiz_log_internal_extract_ok",
-                                     "✨ Internal extraction completed successfully!"))
-                        except Exception as e:
-                            self.log(_("wiz_log_internal_extract_err",
-                                     "❌ Internal extraction error: {error}").format(error=e))
-
-            self.log(_("wiz_log_searching_exes",
-                     "Extraction finished. Searching for executables (.exe)..."))
-            exes = []
-            for root, subdirs, files in os.walk(extracted_folder):
-                for f in files:
-                    if f.lower().endswith('.exe'):
-                        exes.append(os.path.join(root, f))
-
-            if exes:
-                # Heuristic to favor main application binaries
-                def sort_key(exe_path):
-                    filename = os.path.basename(exe_path).lower()
-                    if filename == "7zfm.exe":
-                        return 2
-                    if app_name.lower().replace("++", "").replace(" ", "") in filename:
-                        return 1
-                    return 0
-
-                exes.sort(key=sort_key, reverse=True)
-                clean_names = [os.path.relpath(
-                    e, extracted_folder) for e in exes]
-
-                theme = self.main_window.settings_controller.config.get(
-                    "theme", "Modern Dark")
-                dialog = QInputDialog(self.main_window)
-                dialog.setStyleSheet(
-                    DIALOG_LIGHT_STYLE if theme == "Modern Light" else DIALOG_STYLE)
-                dialog.setWindowTitle(
-                    _("wiz_title_select_exe", "Step 6: Select EXE"))
-                dialog.setComboBoxItems(clean_names)
-
-                if dialog.exec_() == QDialog.Accepted:
-                    exe_rel = dialog.textValue()
-                    final_exe_path = os.path.abspath(
-                        os.path.join(extracted_folder, exe_rel))
-
-                    self._finalize_app_install(
-                        app_name, extracted_folder, final_exe_path, version, latest_ver)
-            else:
-                self.log(_("wiz_err_no_exe_found",
-                         "ERROR: No .exe files found in the archive!"))
-        else:
-            self.log(_("wiz_err_extract_failed",
-                     "ERROR: Extraction failed."))
+            self.log(_("wiz_log_install_cancelled",
+                     "Installation cancelled by user."))
+            shutil.rmtree(extracted_folder, ignore_errors=True)
 
     def _finalize_app_install(self, app_name, local_path, exe_path, version, latest_ver):
         """Handles database registration and shortcut creation."""

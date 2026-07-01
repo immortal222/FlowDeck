@@ -35,6 +35,8 @@ TRANSLATIONS = {
         "about_license_label": "Άδεια χρήσης",
         "about_license_value": "GNU GPLv3",
         "about_github": "GitHub",
+        "no_updates_title": "Ενημέρωση",
+        "no_updates_text": "Έχετε ήδη την τελευταία έκδοση της εφαρμογής!",
 
         # ------------------------------------------------------------------------#
         # --------------------------- Dashboard Page -----------------------------#
@@ -79,8 +81,10 @@ TRANSLATIONS = {
         # My Apps Library Page
         "apps_ui_my_apps_title": "My Apps Library",
         "apps_ui_my_apps_search_placeholder": "Search my library...",
-        "apps_ui_my_apps_sort_az": "Name (A-Z)",
-        "apps_ui_my_apps_sort_recent": "Recently Installed",
+        "apps_ui_my_apps_sort_az": "Όνομα (A-Z)",
+        "apps_ui_my_apps_sort_recent": "Πρόσφατα Εγκατεστημένες",
+        "apps_ui_my_apps_sort_update": "Διαθέσιμη Ενημέρωση",
+        "apps_ui_my_apps_sort_favorite": "Αγαπημένα",
         "apps_ui_my_apps_view_grid": "View: Grid",
         "apps_ui_my_apps_btn_update_all": "Check for Updates",
 
@@ -220,6 +224,7 @@ TRANSLATIONS = {
         "set_ui_group_system_options": "ΕΠΙΛΟΓΕΣ ΣΥΣΤΗΜΑΤΟΣ",
         "set_ui_chk_start_on_boot": "Εκκίνηση με τα Windows",
         "set_ui_chk_minimize_to_tray": "Ελαχιστοποίηση στο System Tray κατά το κλείσιμο",
+        "set_ui_chk_update_to_start": "Έλεγχος για ενημερώσεις του FlowDeck κατά την εκκίνηση",
         "set_ui_group_language": "ΓΛΩΣΣΑ ΕΦΑΡΜΟΓΗΣ",
         "set_ui_tab_system": "Σύστημα",
         "set_lang_el": "Ελληνικά",
@@ -400,6 +405,21 @@ TRANSLATIONS = {
         "db_restore_error": "Αποτυχία επαναφοράς της βάσης.",
         "act_db_restored": "Η βάση δεδομένων αποκαταστάθηκε από αντίγραφο ασφαλείας",
 
+        # Factory Reset
+        "set_factory_reset_title": "Επαναφορά στις Εργοστασιακές Ρυθμίσεις",
+        "set_factory_reset_confirm": "Είστε σίγουροι ότι θέλετε να κάνετε επαναφορά στις εργοστασιακές ρυθμίσεις;\n\nΑυτή η ενέργεια θα διαγράψει όλες τις ρυθμίσεις, τη βάση δεδομένων και το ιστορικό δραστηριοτήτων. Δεν μπορεί να αναιρεθεί!",
+        "set_factory_reset_apps_confirm": "Θέλετε επίσης να διαγράψετε τον φάκελο με τις φορητές εφαρμογές (apps);\n\nΠροειδοποίηση: Αυτό θα διαγράψει οριστικά όλες τις εγκατεστημένες εφαρμογές σας!",
+        "set_factory_reset_success_title": "Η επαναφορά ολοκληρώθηκε",
+        "set_factory_reset_success_msg": "Η επαναφορά στις εργοστασιακές ρυθμίσεις ολοκληρώθηκε με επιτυχία!\n\nΌλες οι ρυθμίσεις, η βάση δεδομένων και το ιστορικό δραστηριοτήτων έχουν διαγραφεί.",
+
+        # Update Notifications
+        "update_title": "Διαθέσιμη Ενημέρωση",
+        "update_available": "Νέα Έκδοση Διαθέσιμη",
+        "new_version": "Νέα Έκδοση",
+        "release_title": "Κυκλοφορία",
+        "changelog": "Αλλαγές",
+        "click_below": "Κάντε κλικ στο κουμπί παρακάτω για λήψη της νέας έκδοσης από το GitHub.",
+        "download_button": "Λήψη",
 
 
     },
@@ -432,6 +452,8 @@ TRANSLATIONS = {
         "about_license_label": "License",
         "about_license_value": "GNU GPLv3",
         "about_github": "GitHub",
+        "no_updates_title": "No Updates Available",
+        "no_updates_text": "Your system is up to date. No updates are available at this time.",
 
         # ------------------------------------------------------------------------#
         # --------------------------- Dashboard Page -----------------------------#
@@ -476,6 +498,8 @@ TRANSLATIONS = {
         "apps_ui_my_apps_search_placeholder": "Search my library...",
         "apps_ui_my_apps_sort_az": "Name (A-Z)",
         "apps_ui_my_apps_sort_recent": "Recently Installed",
+        "apps_ui_my_apps_sort_update": "Update Available",
+        "apps_ui_my_apps_sort_favorite": "Favorite",
         "apps_ui_my_apps_view_grid": "View: Grid",
         "apps_ui_my_apps_btn_update_all": "Check for Updates",
 
@@ -614,6 +638,7 @@ TRANSLATIONS = {
         "set_ui_group_system_options": "SYSTEM OPTIONS",
         "set_ui_chk_start_on_boot": "Start on Windows Boot",
         "set_ui_chk_minimize_to_tray": "Minimize to System Tray on close",
+        "set_ui_chk_update_to_start": "Check for FlowDeck Updates on Start",
         "set_ui_group_language": "APPLICATION LANGUAGE",
         "set_ui_tab_system": "System",
         "set_lang_el": "Greek",
@@ -789,6 +814,22 @@ TRANSLATIONS = {
         "db_restore_success": "Database restored successfully!",
         "db_restore_error": "Failed to restore database.",
         "act_db_restored": "Database restored from backup",
+
+        # Factory Reset
+        "set_factory_reset_title": "Factory Reset",
+        "set_factory_reset_confirm": "Are you sure you want to perform a factory reset?\n\nThis will delete all settings, the database, and the activity log. This action cannot be undone!",
+        "set_factory_reset_apps_confirm": "Would you also like to delete the folder containing your portable applications?\n\nWarning: This will permanently delete all your installed applications!",
+        "set_factory_reset_success_title": "Reset Complete",
+        "set_factory_reset_success_msg": "Factory reset completed successfully! All settings and data have been restored to default values.",
+
+        # Update Notifications
+        "update_title": "Update Available",
+        "update_available": "New Version Available",
+        "new_version": "New Version",
+        "release_title": "Release",
+        "changelog": "Changes",
+        "click_below": "Click the button below to download the new version from GitHub.",
+        "download_button": "Download",
 
     }
 }

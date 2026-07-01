@@ -91,6 +91,8 @@ class ActivityManager:
             icon_file = "icons/activity_update.png"
         elif event_type == "error":
             icon_file = "icons/activity_error.png"
+        elif event_type == "reset":
+            icon_file = "icons/activity_reset.png"
         else:
             icon_file = "icons/activity_launch.png"
 

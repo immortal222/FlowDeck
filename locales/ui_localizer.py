@@ -65,6 +65,20 @@ def localize_myapps_page(window):
     if hasattr(window.ui, 'myApps_searchBox'):
         window.ui.myApps_searchBox.setPlaceholderText(
             _("apps_search_placeholder", "Search my library..."))
+    if hasattr(window.ui, 'myApps_sortCombo'):
+        sort_az_label = _("apps_ui_my_apps_sort_az", "Name (A-Z)")
+        sort_recent_label = _(
+            "apps_ui_my_apps_sort_recent", "Recently Installed")
+        sort_update_label = _(
+            "apps_ui_my_apps_sort_update", "Update Available")
+        sort_favorite_label = _("apps_ui_my_apps_sort_favorite", "Favorite")
+        if window.ui.myApps_sortCombo.count() >= 2:
+            window.ui.myApps_sortCombo.setItemText(0, sort_az_label)
+            window.ui.myApps_sortCombo.setItemText(1, sort_recent_label)
+        if window.ui.myApps_sortCombo.findText(sort_update_label) == -1:
+            window.ui.myApps_sortCombo.addItem(sort_update_label)
+        if window.ui.myApps_sortCombo.findText(sort_favorite_label) == -1:
+            window.ui.myApps_sortCombo.addItem(sort_favorite_label)
     if hasattr(window.ui, 'myApps_viewBtn'):
         window.ui.myApps_viewBtn.setText(_("apps_view_grid", "View: Grid"))
     if hasattr(window.ui, 'myApps_updateAllBtn'):
@@ -93,6 +107,9 @@ def localize_settings_page(window):
     if hasattr(ui, 'chk_minimizeToTray'):
         ui.chk_minimizeToTray.setText(
             _("set_ui_chk_minimize_to_tray", "Minimize to System Tray on close"))
+    if hasattr(ui, 'chk_updateToStart'):
+        ui.chk_updateToStart.setText(
+            _("set_ui_chk_update_to_start", "Check for FlowDeck Updates on Start"))
     if hasattr(ui, 'group_language'):
         ui.group_language.setTitle(
             _("set_ui_group_language", "APPLICATION LANGUAGE"))

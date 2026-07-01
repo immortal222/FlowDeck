@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Form implementation generated from reading ui file 'ui/ui_main_v4.ui'
+# Form implementation generated from reading ui file 'ui\ui_main_v4.ui'
 #
 # Created by: PyQt5 UI code generator 5.15.11
 #
@@ -461,7 +461,7 @@ class Ui_MainWindow(object):
         self.dash_favScrollContent.setWidgetResizable(True)
         self.dash_favScrollContent.setObjectName("dash_favScrollContent")
         self.scrollAreaWidgetContents = QtWidgets.QWidget()
-        self.scrollAreaWidgetContents.setGeometry(QtCore.QRect(0, 0, 399, 375))
+        self.scrollAreaWidgetContents.setGeometry(QtCore.QRect(0, 0, 98, 28))
         self.scrollAreaWidgetContents.setObjectName("scrollAreaWidgetContents")
         self.gridLayout_3 = QtWidgets.QGridLayout(self.scrollAreaWidgetContents)
         self.gridLayout_3.setObjectName("gridLayout_3")
@@ -754,6 +754,9 @@ class Ui_MainWindow(object):
         self.chk_minimizeToTray = QtWidgets.QCheckBox(self.group_systemOptions)
         self.chk_minimizeToTray.setObjectName("chk_minimizeToTray")
         self.verticalLayout_32.addWidget(self.chk_minimizeToTray)
+        self.chk_updateToStart = QtWidgets.QCheckBox(self.group_systemOptions)
+        self.chk_updateToStart.setObjectName("chk_updateToStart")
+        self.verticalLayout_32.addWidget(self.chk_updateToStart)
         self.verticalLayout_31.addWidget(self.group_systemOptions)
         self.group_language = QtWidgets.QGroupBox(self.tab)
         self.group_language.setObjectName("group_language")
@@ -898,7 +901,7 @@ class Ui_MainWindow(object):
         self.myApps_scrollArea.setWidgetResizable(True)
         self.myApps_scrollArea.setObjectName("myApps_scrollArea")
         self.myApps_scrollContent = QtWidgets.QWidget()
-        self.myApps_scrollContent.setGeometry(QtCore.QRect(0, 0, 669, 413))
+        self.myApps_scrollContent.setGeometry(QtCore.QRect(0, 0, 98, 28))
         self.myApps_scrollContent.setObjectName("myApps_scrollContent")
         self.gridLayout_2 = QtWidgets.QGridLayout(self.myApps_scrollContent)
         self.gridLayout_2.setObjectName("gridLayout_2")
@@ -971,6 +974,7 @@ class Ui_MainWindow(object):
         self.group_systemOptions.setTitle(_translate("MainWindow", "ΕΠΙΛΟΓΕΣ ΣΥΣΤΗΜΑΤΟΣ\""))
         self.chk_startOnBoot.setText(_translate("MainWindow", "Εκκίνηση με τα Windows"))
         self.chk_minimizeToTray.setText(_translate("MainWindow", "Ελαχιστοποίηση στο System Tray κατά το κλείσιμο"))
+        self.chk_updateToStart.setText(_translate("MainWindow", "Έλεγχος νέας έκδοσης στην εκκίνηση"))
         self.group_language.setTitle(_translate("MainWindow", "GroupBox"))
         self.settingsTabWidget.setTabText(self.settingsTabWidget.indexOf(self.tab), _translate("MainWindow", "Σύστημα"))
         self.group_theme.setTitle(_translate("MainWindow", "ΘΕΜΑ ΕΦΑΡΜΟΓΗΣ"))
@@ -995,3 +999,13 @@ class Ui_MainWindow(object):
         self.myApps_sortCombo.setItemText(1, _translate("MainWindow", "Recently Installed"))
         self.myApps_viewBtn.setText(_translate("MainWindow", "View: Grid"))
         self.myApps_updateAllBtn.setText(_translate("MainWindow", "Check for Updates"))
+
+
+if __name__ == "__main__":
+    import sys
+    app = QtWidgets.QApplication(sys.argv)
+    MainWindow = QtWidgets.QMainWindow()
+    ui = Ui_MainWindow()
+    ui.setupUi(MainWindow)
+    MainWindow.show()
+    sys.exit(app.exec_())

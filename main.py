@@ -30,13 +30,13 @@ if __name__ == "__main__":
 
     # 1. Read config for language at startup
     config_path = PathManager.get_config_path()
-    current_lang = "Ελληνικά"  # default if file doesn't exist
+    current_lang = "English"  # default if file doesn't exist
 
     if os.path.exists(config_path):
         try:
             with open(config_path, "r", encoding="utf-8") as f:
                 config_data = json.load(f)
-                current_lang = config_data.get("language", "Ελληνικά")
+                current_lang = config_data.get("language", "English")
         except Exception as e:
             print(f"Error reading config in main: {e}")
 

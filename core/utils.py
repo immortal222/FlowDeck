@@ -1,8 +1,11 @@
+from ast import Import
 import configparser
 import os
 import re
 import shutil
 import socket
+
+import pefile
 
 from core.services.path_manager import PathManager
 
@@ -186,3 +189,43 @@ def find_app_executables(folder_path):
                 executables.append(rel_path.replace("\\", "/"))
 
     return sorted(executables, key=lambda x: (x.count('/'), x.lower()))
+
+
+def get_pe_version(exe_path):
+    """Extracts internal version from the PE executable safely and quickly."""
+    try:
+        with pefile.PE(exe_path) as pe:
+            if hasattr(pe, 'VS_FIXEDFILEINFO') and pe.VS_FIXEDFILEINFO:
+                fi = pe.VS_FIXEDFILEINFO[0]
+                ms = fi.FileVersionMS
+                ls = fi.FileVersionLS
+                return f"{ms >> 16}.{ms & 0xFFFF}.{ls >> 16}.{ls & 0xFFFF}"
+    except ImportError:
+        print("ℹ️ Module 'pefile' missing. Run: pip install pefile")
+    except Exception:
+        pass
+    return None
+
+
+def get_pe_name(file_path):
+    try:
+        pe = pefile.PE(file_path)
+        if not hasattr(pe, 'FileInfo'):
+            print("No version info found")
+
+        # Iterate through the parsed FileInfo structures
+        for file_info in pe.FileInfo:
+            for info_block in file_info:
+                # Look specifically for StringTable objects
+                if hasattr(info_block, 'StringTable'):
+                    for entry in info_block.StringTable:
+                        # Look for the 'ProductName' or 'FileDescription' keys
+                        for key, value in entry.entries.items():
+                            key_str = key.decode('utf-8', errors='ignore')
+                            if key_str == 'ProductName':
+                                return value.decode('utf-8', errors='ignore')
+    except Exception as e:
+        print(f"Error loading file: {e}")
+    finally:
+        pe.close()
+    return None

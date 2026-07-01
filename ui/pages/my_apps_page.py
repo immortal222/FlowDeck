@@ -38,8 +38,15 @@ class MyAppsController:
             self.ui.myApps_searchBox.textChanged.connect(self.render_apps)
 
         if hasattr(self.ui, 'myApps_sortCombo'):
-            if self.ui.myApps_sortCombo.findText("Update Available") == -1:
-                self.ui.myApps_sortCombo.addItem("Update Available")
+            # Localized sort option labels
+            sort_update_label = _(
+                "apps_ui_my_apps_sort_update", "Update Available")
+            sort_favorite_label = _(
+                "apps_ui_my_apps_sort_favorite", "Favorite")
+            if self.ui.myApps_sortCombo.findText(sort_update_label) == -1:
+                self.ui.myApps_sortCombo.addItem(sort_update_label)
+            if self.ui.myApps_sortCombo.findText(sort_favorite_label) == -1:
+                self.ui.myApps_sortCombo.addItem(sort_favorite_label)
             self.ui.myApps_sortCombo.currentIndexChanged.connect(
                 self.render_apps)
 
@@ -184,12 +191,22 @@ class MyAppsController:
 
         display_apps = list(self.cached_apps)
 
+        # Localized sort labels
+        sort_az_label = _("apps_ui_my_apps_sort_az", "Name (A-Z)")
+        sort_update_label = _(
+            "apps_ui_my_apps_sort_update", "Update Available")
+        sort_favorite_label = _("apps_ui_my_apps_sort_favorite", "Favorite")
+
         sort_mode = self.ui.myApps_sortCombo.currentText() if hasattr(
-            self.ui, 'myApps_sortCombo') else "Name (A-Z)"
-        if sort_mode == "Name (A-Z)":
+            self.ui, 'myApps_sortCombo') else sort_az_label
+        if sort_mode == sort_az_label:
             display_apps.sort(key=lambda x: x["name"].lower())
-        elif sort_mode == "Update Available":
+        elif sort_mode == sort_update_label:
             display_apps.sort(key=lambda x: x["has_update"], reverse=True)
+        elif sort_mode == sort_favorite_label:
+            # Favorites first, then by name
+            display_apps.sort(key=lambda x: (0 if x.get(
+                "is_favorite", 0) else 1, x["name"].lower()))
 
         search_text = self.ui.myApps_searchBox.text().lower() if hasattr(self.ui,
                                                                          'myApps_searchBox') else ""
@@ -210,7 +227,8 @@ class MyAppsController:
                 self.view_mode,
                 self.icon_cache.get(app["exe"]),
                 self.launch_app,
-                self.show_options_menu
+                self.show_options_menu,
+                app.get("is_favorite", 0)
             )
 
             if self.view_mode == "grid":

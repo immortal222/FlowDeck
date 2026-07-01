@@ -1,16 +1,18 @@
 import logging
 import os
-import sys
 
-from PyQt5.QtCore import Qt
-from PyQt5 import QtCore, QtGui, QtWidgets
+from PyQt5.QtCore import Qt, QUrl
+from PyQt5 import QtGui, QtWidgets
 from PyQt5.QtWidgets import (QAction, QMainWindow, QMenu, QMessageBox,
                              QSystemTrayIcon)
+from PyQt5.QtGui import QDesktopServices
 
 from core.services.activity_manager import ActivityManager
 from core.services.database import DatabaseManager
 from core.services.path_manager import PathManager
 from core.services.update_manager import UpdateManager
+from core.services.version_check import check_github_updates
+from core.services.constants import VERSION, GITHUB_USERNAME, GITHUB_REPO
 from locales.localization import _
 from locales.ui_localizer import localize_main_window
 from ui.generated.ui_main import Ui_MainWindow
@@ -107,6 +109,9 @@ class AppMainWindow(QMainWindow):
             self.settings_controller
         )
 
+        # 12. Check for GitHub updates if enabled
+        self.check_for_github_updates()
+
     def setup_tray_icon(self):
         self.tray_icon = QSystemTrayIcon(self)
         self.tray_icon.setIcon(QtGui.QIcon(
@@ -175,13 +180,99 @@ class AppMainWindow(QMainWindow):
         self.activateWindow()
         self.raise_()
 
+    def check_for_github_updates(self, from_about_dialog=False):
+        """Check for GitHub updates if enabled in config"""
+        try:
+            # Check if update check is enabled
+            if from_about_dialog:
+                # If called from About dialog, always check for updates
+                pass
+            else:
+                update_to_start = self.settings_controller.config.get(
+                    "update_to_start", False)
+
+                if not update_to_start:
+                    return
+
+            # Call check_github_updates with current version
+            current_version = VERSION
+            has_update, update_info = check_github_updates(
+                username=GITHUB_USERNAME,
+                repo=GITHUB_REPO,
+                current_version=current_version
+            )
+
+            if has_update and update_info:
+                self.show_update_dialog(update_info)
+            elif from_about_dialog:
+                msg = QMessageBox(self)
+                msg.setIcon(QMessageBox.Information)
+                msg.setWindowTitle(
+                    _("no_updates_title", "No Updates Available"))
+                msg.setText(
+                    _("no_updates_text", "Your system is up to date. No updates are available at this time."))
+                msg.setStandardButtons(QMessageBox.Ok)
+                self.apply_dialog_theme(msg)
+                msg.exec()
+        except Exception as e:
+            logger.error(f"Error checking for updates: {e}")
+
+    def show_update_dialog(self, update_info):
+        """Display update notification dialog"""
+        msg = QMessageBox(self)
+        msg.setWindowTitle(_("update_title", "Update Available"))
+        msg.setTextInteractionFlags(Qt.TextBrowserInteraction)
+
+        # Set icon
+        icon_path = PathManager.get_asset_path("icons/FlowDeck.png")
+        if os.path.exists(icon_path):
+            msg.setIconPixmap(QtGui.QPixmap(icon_path).scaled(
+                64, 64, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+
+        # Get version and build message
+        new_version = update_info.get("version", "Unknown")
+        title = update_info.get("title", "New Release")
+        changelog = update_info.get("changelog", "")
+        html_url = update_info.get("html_url", "")
+
+        # Truncate changelog if too long
+        if len(changelog) > 300:
+            changelog = changelog[:300] + "..."
+
+        msg.setText(
+            f"<h3>{_('update_available', 'New Version Available')}</h3>"
+            f"<p><b>{_('new_version', 'New Version')}:</b> {new_version}</p>"
+            f"<p><b>{_('release_title', 'Release')}:</b> {title}</p>"
+            f"<hr>"
+            f"<p><b>{_('changelog', 'Changelog')}:</b></p>"
+            f"<p style='font-size: 10px; max-height: 100px; overflow-y: auto;'>{changelog}</p>"
+            f"<hr>"
+            f"<p>{_('click_below', 'Click the button below to download the new version from GitHub.')}</p>"
+        )
+
+        # Add Download button
+        download_button = msg.addButton(
+            _("download_button", "Download"), QMessageBox.AcceptRole)
+        cancel_button = msg.addButton(QMessageBox.Cancel)
+
+        self.apply_dialog_theme(msg)
+
+        # Show dialog and handle result
+        result = msg.exec_()
+        if result == QMessageBox.AcceptRole and html_url:
+            QDesktopServices.openUrl(QUrl(html_url))
+
     def show_about_dialog(self):
-        # Φόρτωση μεταφράσεων από το localization.py
+        # Localized strings for the About dialog
         about_title = _("about_window_title", "About FlowDeck")
-        about_desc = _("about_description", "Portable application manager for Windows.")
-        about_7z = _("about_7zip_mention", "Includes 7-Zip (7za.exe) for archive management.")
-        about_scoop = _("about_scoop_mention", "Powered by the Scoop ecosystem for portable apps.")
-        about_choco = _("about_chocolatey_mention", "Supports Chocolatey for system package installations.")
+        about_desc = _("about_description",
+                       "Portable application manager for Windows.")
+        about_7z = _("about_7zip_mention",
+                     "Includes 7-Zip (7za.exe) for archive management.")
+        about_scoop = _("about_scoop_mention",
+                        "Powered by the Scoop ecosystem for portable apps.")
+        about_choco = _("about_chocolatey_mention",
+                        "Supports Chocolatey for system package installations.")
         about_ver = _("about_version_label", "Version")
         about_license_lbl = _("about_license_label", "License")
         about_license_val = _("about_license_value", "GNU GPLv3")
@@ -191,42 +282,46 @@ class AppMainWindow(QMainWindow):
         msg.setWindowTitle(about_title)
         msg.setTextInteractionFlags(Qt.TextBrowserInteraction)
 
-        # Φόρτωση εικονιδίου για ομοιομορφία
+        # Load and set the FlowDeck icon for the About dialog
         icon_path = PathManager.get_asset_path("icons/FlowDeck.png")
         if os.path.exists(icon_path):
             msg.setIconPixmap(QtGui.QPixmap(icon_path).scaled(
                 64, 64, Qt.KeepAspectRatio, Qt.SmoothTransformation))
 
-        github_url = "https://github.com/immortal222/FlowDeck"
-        
-        # Διαμόρφωση του HTML κειμένου με τις αναφορές σε Scoop, Chocolatey και 7za
+        github_url = f"https://github.com/{GITHUB_USERNAME}/{GITHUB_REPO}"
+
+        # Set the HTML content for the About dialog with localized strings
         msg.setText(
             f"<h2>FlowDeck</h2>"
-        f"<p><b>{about_ver}:</b> 1.0.0 &nbsp;&nbsp;|&nbsp;&nbsp; <b>{about_license_lbl}:</b> <span style='color: #41CD52;'>{about_license_val}</span></p>"
-        f"<p>{about_desc}</p>"
-        f"<hr>"
-        f"<p style='font-size: 11px; line-height: 1.5; color: #a0a0a0;'>"
-        f"• {about_scoop}<br>"
-        f"• {about_choco}<br>"
-        f"• {about_7z}"
-        f"</p>"
-        f"<hr>"
-        f"<p><b>{about_github}:</b> <a href='{github_url}' style='color: #2371C4;'>{github_url}</a></p>"
-        f"<p style='font-size: 10px; color: #777;'>© 2026 George Papadopoulos. Released under GNU GPLv3.</p>"
-    )
+            f"<p><b>{about_ver}:</b> 1.0.0 &nbsp;&nbsp;|&nbsp;&nbsp; <b>{about_license_lbl}:</b> <span style='color: #41CD52;'>{about_license_val}</span></p>"
+            f"<p>{about_desc}</p>"
+            f"<hr>"
+            f"<p style='font-size: 11px; line-height: 1.5; color: #a0a0a0;'>"
+            f"• {about_scoop}<br>"
+            f"• {about_choco}<br>"
+            f"• {about_7z}"
+            f"</p>"
+            f"<hr>"
+            f"<p><b>{about_github}:</b> <a href='{github_url}' style='color: #2371C4;'>{github_url}</a></p>"
+            f"<p style='font-size: 10px; color: #777;'>© 2026 George Papadopoulos. Released under GNU GPLv3.</p>"
+        )
 
-        # Εφαρμογή στυλ ανάλογα με το τρέχον θέμα
-        current_theme = self.settings_controller.config.get("theme", "Modern Dark")
-        if current_theme == "Modern Light":
-            msg.setStyleSheet(DIALOG_LIGHT_STYLE)
-        else:
-            msg.setStyleSheet(DIALOG_STYLE)
+        check_updates_button = msg.addButton(
+            _("check_updates_button", "Check for Updates"),
+            QMessageBox.ResetRole
+        )
 
-        # Ορισμός στυλ για το OK button
-        ok_button = msg.addButton(QMessageBox.Ok)
-        ok_button.setObjectName("primaryButton")
+        ok_button = msg.addButton(
+            QMessageBox.Ok
+        )
 
-        msg.exec_()
+        check_updates_button.clicked.connect(
+            lambda _: self.check_for_github_updates(from_about_dialog=True)
+        )
+
+        self.apply_dialog_theme(msg)
+
+        msg.exec()
 
     def setup_sidebar_logic(self):
         # 1. List of navigation frames
@@ -301,19 +396,19 @@ class AppMainWindow(QMainWindow):
                     minimize_to_tray = bool(raw_value)
             else:
                 print(
-                    "⚠️ [DEBUG] Δεν βρέθηκε το settings_controller. Χρησιμοποιείται η προεπιλογή (True).")
+                    "⚠️ [DEBUG] settings_controller not found. Using default (True).")
         except Exception as e:
             print(
-                f"⚠️ [DEBUG] Σφάλμα κατά την ανάγνωση του minimize_to_tray: {e}")
+                f"⚠️ [DEBUG] Error reading minimize_to_tray: {e}")
 
-        print(f"🛠️ [DEBUG] Τελική τιμή minimize_to_tray: {minimize_to_tray}")
+        print(f"🛠️ [DEBUG] Final minimize_to_tray value: {minimize_to_tray}")
 
         # If enabled, hide window and ignore close event
         if minimize_to_tray and hasattr(self, 'tray_icon'):
             self.hide()
             self.tray_icon.showMessage(
                 _("tray_title", "FlowDeck"),
-                _("tray_message", "Η εφαρμογή συνεχίζει να εκτελείται στο παρασκήνιο."),
+                _("tray_message", "The application continues to run in the background."),
             )
             event.ignore()
         else:
@@ -326,3 +421,12 @@ class AppMainWindow(QMainWindow):
             if hasattr(self, 'tray_icon'):
                 self.tray_icon.hide()
             QtWidgets.QApplication.quit()
+
+    def apply_dialog_theme(self, dialog):
+        """Εφαρμόζει το κατάλληλο stylesheet σε ένα dialog με βάση το τρέχον theme."""
+        current_theme = self.settings_controller.config.get(
+            "theme", "Modern Dark")
+        if current_theme == "Modern Light":
+            dialog.setStyleSheet(DIALOG_LIGHT_STYLE)
+        else:
+            dialog.setStyleSheet(DIALOG_STYLE)

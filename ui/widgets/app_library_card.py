@@ -1,20 +1,35 @@
+import os
+
 from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QPixmap
 from PyQt5.QtWidgets import (QFrame, QVBoxLayout, QHBoxLayout, QLabel,
                              QPushButton)
 
 from locales.localization import _
+from core.services.path_manager import PathManager
 
 
 class AppLibraryCard(QFrame):
     """Widget representing an application entry in the library view."""
 
-    def __init__(self, app, view_mode, icon_pixmap, launch_callback, options_callback, parent=None):
+    def __init__(self, app, view_mode, icon_pixmap, launch_callback, options_callback, is_favorite, parent=None):
         super().__init__(parent)
         self.app = app
         self.view_mode = view_mode
         self.icon_pixmap = icon_pixmap
         self.launch_callback = launch_callback
         self.options_callback = options_callback
+        self.is_favorite = is_favorite
+
+        # Preload favorite star pixmap using centralized PathManager
+        self.star_pixmap = None
+        try:
+            star_path = PathManager.get_asset_path(
+                os.path.join('icons', 'star.png'))
+            if os.path.exists(star_path):
+                self.star_pixmap = QPixmap(star_path)
+        except Exception:
+            self.star_pixmap = None
 
         self.setProperty("class", "AppCard")
         self.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -53,17 +68,36 @@ class AppLibraryCard(QFrame):
         info_layout = QHBoxLayout()
         info_layout.setContentsMargins(0, 0, 0, 0)
 
-        # Column 1: Left spacer
+        # Column 1: Left spacer / favorite star
+        if self.is_favorite:
+            star_lbl = QLabel()
+            star_lbl.setProperty("class", "FavoriteStar")
+            star_lbl.setFixedSize(16, 16)
+            star_lbl.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            if self.star_pixmap and not self.star_pixmap.isNull():
+                star_lbl.setPixmap(self.star_pixmap.scaled(
+                    14, 14, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            else:
+                star_lbl.setText("★")
+            info_layout.addWidget(star_lbl)
+            info_layout.addSpacing(4)
+        else:
+            placeholder = QLabel()
+            placeholder.setFixedSize(16, 16)
+            info_layout.addWidget(placeholder)
+            info_layout.addSpacing(4)
+
         info_layout.addStretch(1)
 
+        # Column 2: Centered icon
         icon_label = QLabel()
         icon_label.setFixedSize(42, 42)
         icon_label.setScaledContents(True)
         if self.icon_pixmap:
             icon_label.setPixmap(self.icon_pixmap)
 
-        # Column 2: Centered icon
-        info_layout.addWidget(icon_label, 1, Qt.AlignCenter)
+        info_layout.addWidget(icon_label, 0, Qt.AlignCenter)
+        info_layout.addStretch(1)
 
         ver_lbl = QLabel(f"v{self.app['ver']}")
         ver_lbl.setProperty("class", "AppVersionLabel")
@@ -105,6 +139,23 @@ class AppLibraryCard(QFrame):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(15, 0, 15, 0)
         layout.setSpacing(20)
+
+        # Favorite star (left of icon) for list view
+        if self.is_favorite:
+            list_star = QLabel()
+            list_star.setProperty("class", "FavoriteStar")
+            list_star.setFixedSize(16, 16)
+            list_star.setAlignment(Qt.AlignCenter)
+            if self.star_pixmap and not self.star_pixmap.isNull():
+                list_star.setPixmap(self.star_pixmap.scaled(
+                    14, 14, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            else:
+                list_star.setText("★")
+            layout.addWidget(list_star)
+        else:
+            spacer = QLabel()
+            spacer.setFixedWidth(16)
+            layout.addWidget(spacer)
 
         icon_label = QLabel()
         icon_label.setFixedSize(38, 38)

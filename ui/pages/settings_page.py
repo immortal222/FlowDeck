@@ -2,6 +2,9 @@ import json
 import os
 import sys
 import winreg
+import shutil
+import stat
+import subprocess
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (QApplication, QDialog, QFileDialog, QHBoxLayout,
@@ -13,6 +16,7 @@ from core.services.path_manager import PathManager
 from locales.localization import _
 from locales.ui_localizer import localize_settings_page
 from ui.pages.backup_wizard_controller import BackupWizardController
+from ui.dialogs.dialog_utils import ask_confirmation
 from ui.styles.styles import DIALOG_LIGHT_STYLE, DIALOG_STYLE
 
 
@@ -102,7 +106,8 @@ class SettingsController:
             "language": "English",
             "theme": "Modern Dark",
             "update_freq": "On Startup",
-            "silent_updater": True
+            "silent_updater": True,
+            "update_to_start": True
         }
 
         if not os.path.exists(default_apps_path):
@@ -160,8 +165,8 @@ class SettingsController:
         if hasattr(self.ui, 'btn_clearActivityLog'):
             self.ui.btn_clearActivityLog.clicked.connect(self.clear_logs)
 
-        if hasattr(self.ui, 'btn_purgeOrphans'):
-            self.ui.btn_purgeOrphans.clicked.connect(self.purge_orphans)
+        if hasattr(self.ui, 'btn_resetDefaults'):
+            self.ui.btn_resetDefaults.clicked.connect(self.factory_reset)
 
         if hasattr(self.ui, 'btn_scanAndRepair'):
             self.ui.btn_scanAndRepair.clicked.connect(self.scan_and_repair)
@@ -188,7 +193,11 @@ class SettingsController:
 
         if hasattr(self.ui, 'chk_minimizeToTray'):
             self.ui.chk_minimizeToTray.setChecked(
-                self.config.get("minimize_to_tray", True))
+                self.config.get("minimize_to_tray", False))
+
+        if hasattr(self.ui, 'chk_updateToStart'):
+            self.ui.chk_updateToStart.setChecked(
+                self.config.get("update_to_start", True))
 
         if hasattr(self.ui, 'chk_enableSilentUpdater'):
             self.ui.chk_enableSilentUpdater.setChecked(
@@ -249,6 +258,7 @@ class SettingsController:
         self.config["install_path"] = self.ui.txt_installPath.text()
         self.config["start_on_boot"] = self.ui.chk_startOnBoot.isChecked()
         self.config["minimize_to_tray"] = self.ui.chk_minimizeToTray.isChecked()
+        self.config["update_to_start"] = self.ui.chk_updateToStart.isChecked()
         if hasattr(self.ui, 'chk_enableSilentUpdater'):
             self.config["silent_updater"] = self.ui.chk_enableSilentUpdater.isChecked()
 
@@ -297,7 +307,7 @@ class SettingsController:
             err_box.exec()
 
     # ==========================================
-    # ΣΥΝΑΡΤΗΣΕΙΣ ΣΥΝΤΗΡΗΣΗΣ (MAINTENANCE)
+    # MAINTENANCE
     # ==========================================
 
     def clear_logs(self):
@@ -436,3 +446,193 @@ class SettingsController:
         """Launches the Backup & Restore Wizard."""
         controller = BackupWizardController(self.main_window, self.db)
         controller.open_wizard()
+
+    def factory_reset(self):
+        """Resets the application to factory defaults without requiring a restart."""
+        print("\n=== [DEBUG_RESET] Starting factory_reset execution ===")
+
+        # 1. Ask for confirmation before performing factory reset
+        title = _("set_factory_reset_title", "Factory Reset")
+        confirm_msg = _(
+            "set_factory_reset_confirm",
+            "Are you sure you want to perform a factory reset?\n\nThis will delete all settings, the database, and the activity log. This action cannot be undone!"
+        )
+
+        try:
+            from ui.dialogs.dialog_utils import ask_confirmation
+            confirmed = ask_confirmation(self.main_window, title, confirm_msg)
+        except Exception:
+            msg = QMessageBox(self.main_window)
+            msg.setWindowTitle(title)
+            msg.setText(confirm_msg)
+            msg.setIcon(QMessageBox.Warning)
+            msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+            msg.setDefaultButton(QMessageBox.No)
+            msg.setStyleSheet(self.get_msg_style())
+            confirmed = (msg.exec_() == QMessageBox.Yes)
+
+        if not confirmed:
+            return
+
+        # 2. Ask if the user also wants to delete the portable applications folder (install_path)
+        apps_confirm_msg = _(
+            "set_factory_reset_apps_confirm",
+            "Would you also like to delete the folder containing your portable applications?\n\nWarning: This will permanently delete all your installed applications!"
+        )
+
+        try:
+            from ui.dialogs.dialog_utils import ask_confirmation
+            delete_apps = ask_confirmation(
+                self.main_window, title, apps_confirm_msg)
+        except Exception:
+            msg = QMessageBox(self.main_window)
+            msg.setWindowTitle(title)
+            msg.setText(apps_confirm_msg)
+            msg.setIcon(QMessageBox.Warning)
+            msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+            msg.setDefaultButton(QMessageBox.No)
+            msg.setStyleSheet(self.get_msg_style())
+            delete_apps = (msg.exec_() == QMessageBox.Yes)
+
+        # 3. Perform database ERASE using dynamic connection from DatabaseManager
+        if self.db and hasattr(self.db, 'get_connection'):
+            try:
+                print(
+                    "[DEBUG_RESET] Opening dynamic database connection for wiping...")
+                with self.db.get_connection() as conn:
+                    cursor = conn.cursor()
+
+                    # Wipe data from the specific core application tables
+                    for table in ["apps", "categories", "activity_log", "favorites"]:
+                        try:
+                            cursor.execute(f"DELETE FROM {table};")
+                            print(
+                                f"[DEBUG_RESET] Table {table} wiped successfully.")
+                        except Exception as e_tbl:
+                            print(
+                                f"[DEBUG_RESET] Table {table} wipe skipped/failed: {e_tbl}")
+
+                    # Reset internal autoincrement counter
+                    try:
+                        cursor.execute("DELETE FROM sqlite_sequence;")
+                    except Exception:
+                        pass
+
+                    # Commit changes safely
+                    conn.commit()
+
+                    # Run VACUUM to reclaim space and flush the file
+                    try:
+                        cursor.execute("VACUUM;")
+                        print("[DEBUG_RESET] Database VACUUM complete.")
+                    except Exception as e_vac:
+                        print(f"[DEBUG_RESET] VACUUM skipped: {e_vac}")
+
+                print("[DEBUG_RESET] Database clear block successfully finished.")
+            except Exception as e:
+                print(f"[DEBUG_RESET] ERROR during database wipe: {e}")
+
+        # 4. Perform settings rewrite with default parameters (No File Deletion)
+        config_path = self.config_file
+
+        # Define the exact factory default configuration dictionary
+        default_apps_path = os.path.expanduser(
+            "~/FlowDeck/Apps").replace("\\", "/")
+        default_config = {
+            "install_path": default_apps_path,
+            "start_on_boot": False,
+            "minimize_to_tray": True,
+            "language": "English",
+            "theme": "Modern Dark",
+            "update_freq": "On Startup",
+            "silent_updater": True
+        }
+
+        try:
+            print(
+                f"[DEBUG_RESET] Rewriting config.json with factory defaults at: {config_path}")
+            with open(config_path, "w", encoding="utf-8") as f:
+                json.dump(default_config, f, indent=4, ensure_ascii=False)
+
+            # Update the runtime memory config immediately
+            self.config = default_config
+            print("[DEBUG_RESET] config.json successfully overwritten.")
+        except Exception as e_cfg:
+            print(f"[DEBUG_RESET] ERROR rewriting config file: {e_cfg}")
+
+        # 5. Perform activity log file deletion
+        if hasattr(self.main_window, 'activity_manager'):
+            self.main_window.activity_manager.clear_history()
+            print(
+                f"[DEBUG_RESET] Activity log file deleted successfully")
+        else:
+            print(
+                "[DEBUG_RESET] Activity manager not found; skipping activity log deletion.")
+
+        if hasattr(self.main_window, 'activity_manager'):
+            self.main_window.activity_manager.log(
+                "set_factory_reset_title", event_type="reset")
+
+        # 6. Handle optional apps directory deletion
+        apps_root = self.config.get("install_path")
+        if delete_apps and apps_root and os.path.exists(apps_root) and os.path.isdir(apps_root):
+            def remove_readonly(func, path, excinfo):
+                os.chmod(path, stat.S_IWRITE)
+                func(path)
+            try:
+                shutil.rmtree(apps_root, onerror=remove_readonly)
+                print("[DEBUG_RESET] Apps folder tree deleted successfully.")
+
+                # Re-create the empty apps folder just in case to keep paths clean
+                os.makedirs(apps_root, exist_ok=True)
+            except Exception as e:
+                print(
+                    f"[DEBUG_RESET] ERROR deleting apps root folder {apps_root}: {e}")
+
+        # 7. Apply global theme reset and update all active UI modules immediately
+        try:
+            print(
+                "[DEBUG_RESET] Updating active UI controllers with default parameters...")
+
+            # Apply default theme (Modern Dark) globally
+            from ui.main_window import apply_global_theme
+            apply_global_theme(self.config["theme"])
+
+            # Configure registry boot setting to False
+            self.apply_start_on_boot(False)
+
+            # Re-populate current settings page elements (checkboxes, dropdowns)
+            self.populate_ui()
+
+            # Refresh other active UI views if they exist
+            if hasattr(self.main_window, 'activity_manager'):
+                self.main_window.activity_manager.refresh_ui()
+
+            if hasattr(self.main_window, 'dashboard_controller'):
+                self.main_window.dashboard_controller.refresh_dashboard()
+
+            if hasattr(self.main_window, 'my_apps_controller'):
+                self.main_window.my_apps_controller.refresh_data()
+
+            print("[DEBUG_RESET] All active UI views refreshed successfully.")
+        except Exception as e_ui:
+            print(f"[DEBUG_RESET] UI dynamic refresh warning: {e_ui}")
+
+        # 8. Show success message box
+        success_title = _("set_factory_reset_success_title", "Reset Complete")
+        success_msg = _(
+            "set_factory_reset_success_msg",
+            "Factory reset completed successfully! All settings and data have been restored to default values."
+        )
+
+        success_box = QMessageBox(self.main_window)
+        success_box.setStyleSheet(self.get_msg_style())
+        success_box.setIcon(QMessageBox.Information)
+        success_box.setWindowTitle(success_title)
+        success_box.setText(success_msg)
+        ok_btn = success_box.button(
+            QMessageBox.Ok) or success_box.addButton(QMessageBox.Ok)
+        if ok_btn:
+            ok_btn.setObjectName("primaryButton")
+        success_box.exec_()
+        print("=== [DEBUG_RESET] Factory Reset finished successfully! ===")

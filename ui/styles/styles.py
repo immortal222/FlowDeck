@@ -1017,6 +1017,7 @@ QComboBox#combo_languageSelect:hover {
 
 QCheckBox#chk_startOnBoot,
 QCheckBox#chk_minimizeToTray,
+QCheckBox#chk_updateToStart,
 QCheckBox#chk_enableSilentUpdater {
     color: #A0AAB0;
     font-family: "Segoe UI", sans-serif;
@@ -1902,6 +1903,7 @@ QComboBox#combo_languageSelect:hover {
 
 QCheckBox#chk_startOnBoot,
 QCheckBox#chk_minimizeToTray,
+QCheckBox#chk_updateToStart,
 QCheckBox#chk_enableSilentUpdater {
     color: #444444;
     font-family: "Segoe UI", sans-serif;

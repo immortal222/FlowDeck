@@ -114,4 +114,14 @@ FlowDeck itself is released under the GNU GPLv3 License. Feel free to use, modif
 * Implement 1-Click Update for ZIP-based applications directly from the UI.
 * Add a background scheduler for automatic orphan folder detection.
 * Enrich the HTML Activity Timeline with interactive statistical charts.
-* When checking for updates, change text to button
+
+## Acknowledgements / Credits
+* Developed with the assistance of **Google Gemini**, which helped with code generation, structuring, and troubleshooting.
+
+
+### 🛡️ Windows Defender / Antivirus Warning (False Positive)
+As this application is packaged into a standalone executable using PyInstaller, some antivirus programs (including Windows Defender SmartScreen) may flag it as unrecognized or potentially unsafe. 
+
+**This is a false positive.** The application is completely safe and open-source—you can audit the full source code right here. 
+
+* **How to run it:** If Windows SmartScreen blocks the launch, click on **"More info"** and then select **"Run anyway"**.

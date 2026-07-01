@@ -1320,8 +1320,8 @@
                      <rect>
                       <x>0</x>
                       <y>0</y>
-                      <width>399</width>
-                      <height>375</height>
+                      <width>98</width>
+                      <height>28</height>
                      </rect>
                     </property>
                     <layout class="QGridLayout" name="gridLayout_3"/>
@@ -2052,6 +2052,13 @@
                    </property>
                   </widget>
                  </item>
+                 <item>
+                  <widget class="QCheckBox" name="chk_updateToStart">
+                   <property name="text">
+                    <string>Έλεγχος νέας έκδοσης στην εκκίνηση</string>
+                   </property>
+                  </widget>
+                 </item>
                 </layout>
                </widget>
               </item>
@@ -2392,8 +2399,8 @@
               <rect>
                <x>0</x>
                <y>0</y>
-               <width>669</width>
-               <height>413</height>
+               <width>98</width>
+               <height>28</height>
               </rect>
              </property>
              <layout class="QGridLayout" name="gridLayout_2"/>

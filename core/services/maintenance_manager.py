@@ -1,13 +1,13 @@
-
-
 import os
 import re
 import sqlite3
+import json
 
 from datetime import datetime
 
 from core.api.scoop_api import ScoopAPI
-from core.utils import get_portable_apps_metadata, get_safe_folder_path
+from core.services.path_manager import PathManager
+from core.utils import get_portable_apps_metadata, get_safe_folder_path, get_pe_version, get_pe_name
 
 
 class MaintenanceManager:
@@ -16,7 +16,7 @@ class MaintenanceManager:
     def __init__(self, db_manager, config_dict):
         self.db = db_manager
         self.config = config_dict
-        # --- ΝΕΟ: 2. Αρχικοποίηση του ScoopAPI ---
+        # --- Initialization of ScoopAPI ---
         self.scoop = ScoopAPI()
 
     def _detect_db_schema(self, cursor):
@@ -31,22 +31,6 @@ class MaintenanceManager:
         cursor.execute(f"PRAGMA table_info({table_name})")
         columns = [row[1] for row in cursor.fetchall()]
         return table_name, columns
-
-    def extract_name_and_version(self, folder_name):
-        """Extracts application name and version from a folder name string."""
-        clean_name = folder_name.replace("_portable", "").replace(
-            "-portable", "").replace(".portable", "")
-        version_pattern = r'[-_]v?(\d+\.\d+(?:\.\d+)?(?:[-_][a-zA-Z0-9]+)?)'
-        match = re.search(version_pattern, clean_name)
-
-        if match:
-            version = match.group(1)
-            name_part = clean_name[:match.start()]
-            name = name_part.replace("-", " ").replace("_", " ").strip()
-            return name, version
-
-        name = clean_name.replace("-", " ").replace("_", " ").strip()
-        return name, "1.0.0"
 
     def find_main_executable(self, folder_path):
         """Scans a folder to find the most likely main executable using a scoring system."""
@@ -104,10 +88,58 @@ class MaintenanceManager:
                 best_cand = path
         return best_cand
 
+    def extract_name_and_version(self, folder_path):
+        """Extracts application name and version using folder name and executable metadata."""
+        folder_name = os.path.basename(folder_path)
+
+        clean_name = folder_name.replace("_portable", "").replace(
+            "-portable", "").replace(".portable", "")
+        version_pattern = r'[-_]v?(\d+\.\d+(?:\.\d+)?(?:[-_][a-zA-Z0-9]+)?)'
+        match = re.search(version_pattern, clean_name)
+
+        if match:
+            version = match.group(1)
+            name_part = clean_name[:match.start()]
+            name = name_part.replace("-", " ").replace("_", " ").strip()
+            return name, version
+
+        main_exe = self.find_main_executable(folder_path)
+        print(f"Detected Main EXE: {main_exe}")
+
+        pe_version = None
+        pe_name = None
+
+        if main_exe and os.path.exists(main_exe):
+            pe_version = get_pe_version(main_exe)
+            if pe_version:
+                if hasattr(self, 'log'):
+                    self.log(
+                        f"🔎 Internal EXE Version found (pefile): {pe_version}")
+                else:
+                    print(
+                        f"🔎 Internal EXE Version found (pefile): {pe_version}")
+
+            pe_name = get_pe_name(main_exe)
+            if pe_name:
+                if hasattr(self, 'log'):
+                    self.log(f"🔎 Internal EXE Name found (pefile): {pe_name}")
+                else:
+                    print(f"🔎 Internal EXE Name found (pefile): {pe_name}")
+
+        version = pe_version if pe_version else "1.0.0"
+
+        if pe_name:
+            name = pe_name.strip()
+        else:
+            name = clean_name.replace("-", " ").replace("_", " ").strip()
+
+        print(f"Detected Name: {name}, PE Name: {pe_name}")
+        return name, version
+
     def execute_scan_and_repair(self, dialog_callback=None):
         """
         Performs the main maintenance task:
-        Phase A: Cleanup orphaned records (folders/files no longer existing).
+        Phase A: Cleanup orphaned records (Folders/files no longer existing).
         Phase B: Scan for new portable folders and register them.
         """
         if hasattr(self.db, 'db_path') and self.db.db_path:
@@ -124,32 +156,33 @@ class MaintenanceManager:
         added_count = 0
 
         try:
+            # open a connection to the database
             conn = sqlite3.connect(db_path)
             cursor = conn.cursor()
 
             table_name, columns = self._detect_db_schema(cursor)
             if not table_name:
+                conn.close()
                 return False, 0, 0, "Could not detect DB schema table."
 
             dir_col = 'local_path' if 'local_path' in columns else None
             exe_col = 'exe_path' if 'exe_path' in columns else None
             if not dir_col or not exe_col:
+                conn.close()
                 return False, 0, 0, f"Required columns missing."
 
             # --- PHASE A: REPAIR (ORPHAN CLEANUP) ---
-            cursor.execute(
-                f"SELECT id, name, {dir_col}, {exe_col} FROM {table_name}")
-            registered_apps = cursor.fetchall()
+            try:
+                removed_count = self.cleanup_orphaned_records(
+                    cursor, table_name, dir_col, exe_col)
+            except Exception as orphan_err:
+                print(f"⚠️ Soft error during orphan cleanup: {orphan_err}")
+                # Δεν σταματάμε, αφήνουμε το σκανάρισμα να προχωρήσει
 
-            registered_dirs = set()
-            for app_id, app_name, install_dir, exe_path in registered_apps:
-                norm_dir = os.path.abspath(install_dir).replace(
-                    "\\", "/") if install_dir else ""
-                registered_dirs.add(norm_dir.lower())
-                if not install_dir or not os.path.exists(install_dir) or (exe_path and not os.path.exists(exe_path)):
-                    cursor.execute(
-                        f"DELETE FROM {table_name} WHERE id = ?", (app_id,))
-                    removed_count += 1
+            # make a list of already registered directories to avoid duplicates
+            cursor.execute(f"SELECT {dir_col} FROM {table_name}")
+            registered_dirs = {os.path.abspath(row[0]).replace(
+                "\\", "/").lower() for row in cursor.fetchall() if row[0]}
 
             # --- PHASE B: SCAN (AUTO DETECTION & FOLDER RENAMING) ---
             install_path = self.config.get("install_path", "")
@@ -165,7 +198,7 @@ class MaintenanceManager:
                                 main_exe_norm = os.path.abspath(
                                     main_exe).replace("\\", "/")
 
-                                # 1. Try to find metadata from appinfo.ini (PortableApps.com)
+                                # 1. Try to find metadata from appinfo.ini
                                 metadata = get_portable_apps_metadata(
                                     entry.path)
                                 is_paf = False
@@ -178,7 +211,7 @@ class MaintenanceManager:
                                 else:
                                     # 2. Fallback to extracting from folder name
                                     guessed_name, guessed_version = self.extract_name_and_version(
-                                        entry.name)
+                                        entry.path)
 
                                 while True:
                                     final_name = guessed_name
@@ -206,14 +239,12 @@ class MaintenanceManager:
                                     actual_dir_path = norm_entry_path
                                     actual_exe_path = main_exe_norm
 
-                                    # If not a PAF app (ZIP/7Z), rename folder to match app name
                                     if not is_paf:
                                         base_directory = os.path.dirname(
                                             norm_entry_path)
                                         new_dir_path = get_safe_folder_path(
                                             base_directory, final_name, norm_entry_path)
 
-                                        # Προσπάθεια μετονομασίας αν το νέο όνομα είναι διαφορετικό
                                         if new_dir_path.lower() != norm_entry_path.lower():
                                             try:
                                                 os.rename(
@@ -229,7 +260,7 @@ class MaintenanceManager:
                                                 main_exe_norm = actual_exe_path
                                             except Exception as e:
                                                 print(
-                                                    f"⚠️ Αποτυχία μετονομασίας φακέλου: {e}")
+                                                    f"⚠️ Failed to rename folder: {e}")
                                                 actual_dir_path = norm_entry_path
                                                 actual_exe_path = main_exe_norm
 
@@ -241,7 +272,6 @@ class MaintenanceManager:
                                         insert_data[dir_col] = actual_dir_path
                                     if exe_col in columns:
                                         insert_data[exe_col] = actual_exe_path
-
                                     if 'source' in columns:
                                         insert_data['source'] = 'scoop' if is_scoop else 'manual'
 
@@ -271,14 +301,13 @@ class MaintenanceManager:
                                     try:
                                         cursor.execute(insert_sql, values)
                                         added_count += 1
-                                        # Add new path to registered list to avoid duplicates in the same scan
                                         registered_dirs.add(
                                             actual_dir_path.lower())
                                         break
                                     except sqlite3.IntegrityError as e:
                                         if "UNIQUE" in str(e).upper() or "NAME" in str(e).upper():
                                             print(
-                                                f"⚠️ Το όνομα '{final_name}' υπάρχει ήδη! Επιστροφή στο UI.")
+                                                f"⚠️ Name '{final_name}' already exists! Returning to UI.")
                                             guessed_name = f"{final_name} 2"
                                             guessed_version = final_version
                                             if dialog_callback:
@@ -292,9 +321,69 @@ class MaintenanceManager:
                                         else:
                                             raise e
 
+            # one final commit after all operations
             conn.commit()
             conn.close()
             return True, removed_count, added_count, None
 
         except Exception as e:
             return False, 0, 0, str(e)
+
+    def cleanup_orphaned_records(self, cursor, table_name, dir_col, exe_col):
+        """Removes database records whose folders or executables no longer exist on disk,
+        or belong to an old install directory."""
+        from pathlib import Path  # Εισαγωγή για έξυπνη διαχείριση μονοπατιών
+        removed_count = 0
+
+        # 1. Διάβασμα του install_path από το config αρχείο
+        current_install_path = None
+        config_file = PathManager.get_config_path()
+        try:
+            with open(config_file, "r", encoding="utf-8") as f:
+                user_config = json.load(f)
+                current_install_path = user_config.get("install_path", "")
+        except Exception as e:
+            print(f"Error reading config file: {e}")
+
+        # Μετατροπή του κεντρικού φακέλου σε αντικείμενο Path (απόλυτο μονοπάτι)
+        if current_install_path:
+            current_base_path = Path(current_install_path).resolve()
+        else:
+            current_base_path = None
+
+        print(f"🔎 Current active install path (Resolved): {current_base_path}")
+
+        # 2. Έλεγχος των εγγραφών της βάσης
+        cursor.execute(
+            f"SELECT id, name, {dir_col}, {exe_col} FROM {table_name}")
+        registered_apps = cursor.fetchall()
+
+        for app_id, app_name, install_dir, exe_path in registered_apps:
+            # Αρχικός έλεγχος αν ο φάκελος ή το EXE δεν υπάρχουν φυσικά στον δίσκο
+            is_orphan = not install_dir or not os.path.exists(
+                install_dir) or (exe_path and not os.path.exists(exe_path))
+
+            is_from_old_path = False
+
+            # Αν ο φάκελος υπάρχει, ελέγχουμε αν είναι ΜΕΣΑ στον τρέχοντα κεντρικό φάκελο
+            if not is_orphan and install_dir and current_base_path:
+                try:
+                    app_path = Path(install_dir).resolve()
+
+                    # Η is_relative_to ελέγχει αν το app_path είναι υποφάκελος του current_base_path
+                    # π.χ. αν το "D:/Old/App" είναι μέσα στο "C:/New/Custom_Folder" -> θα βγάλει False
+                    if not app_path.is_relative_to(current_base_path):
+                        is_from_old_path = True
+                        print(
+                            f"🗑️ Found app from old path: {app_name} ({install_dir})")
+                except Exception as path_err:
+                    print(f"Error resolving path for {app_name}: {path_err}")
+
+            # Αν είναι ορφανό ή από παλιό φάκελο, διαγραφή
+            if is_orphan or is_from_old_path:
+                cursor.execute(
+                    f"DELETE FROM {table_name} WHERE id = ?", (app_id,))
+                removed_count += 1
+
+        print(f"📊 Total removed from database: {removed_count}")
+        return removed_count
