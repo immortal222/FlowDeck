@@ -4,6 +4,7 @@ import os
 from datetime import datetime
 
 from locales.localization import _
+from core.services.config_manager import ConfigManager
 from core.services.path_manager import PathManager
 from ui.styles.styles import ACTIVITY_THEMES
 
@@ -13,8 +14,9 @@ logger = logging.getLogger(__name__)
 class ActivityManager:
     """Handles logging and rendering of the application activity timeline."""
 
-    def __init__(self):
+    def __init__(self, config_manager=None):
         self.ui_widget = None
+        self.config = config_manager if config_manager is not None else ConfigManager()
         self.log_file = PathManager.get_log_path()
         self.events = self.load_events()
 
@@ -118,20 +120,13 @@ class ActivityManager:
             return
 
         # Load current theme for timeline colors
-        theme_name = "Modern Dark"
-        config_path = PathManager.get_config_path()
-        if os.path.exists(config_path):
-            try:
-                with open(config_path, "r", encoding="utf-8") as f:
-                    theme_name = json.load(f).get("theme", "Modern Dark")
-            except:
-                pass
+        theme_name = self.config.get("theme", "Modern Dark")
 
         theme_data = ACTIVITY_THEMES.get(
             theme_name, ACTIVITY_THEMES["Modern Dark"])
         txt_color = theme_data.get("timeline_text", "#DBE5EB")
         time_color = theme_data.get("timeline_time", "#888888")
-        print(
+        logger.debug(
             f"Applying activity theme: {theme_name} with text color {txt_color} and time color {time_color}")
 
         self.ui_widget.setStyleSheet(

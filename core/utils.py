@@ -5,9 +5,12 @@ import re
 import shutil
 import socket
 
+import logging
 import pefile
 
 from core.services.path_manager import PathManager
+
+logger = logging.getLogger(__name__)
 
 
 def is_internet_available():
@@ -33,23 +36,51 @@ def get_folder_size_gb(folder_path):
     return total_size / (1024**3)
 
 
+def _normalize_version_string(value):
+    if value is None:
+        return None
+    text = str(value).strip().lower()
+    if not text or text in {"", "none", "unknown", "n/a", "-"}:
+        return None
+    return text.lstrip('v')
+
+
+def _version_parts(value):
+    value = _normalize_version_string(value)
+    if value is None:
+        return None
+
+    parts = []
+    for part in value.split('.'):
+        if part.isdigit():
+            parts.append(int(part))
+        else:
+            # preserve non-numeric suffixes by ignoring them for comparison
+            break
+
+    # Normalize trailing zeros so 3.70.6.0 == 3.70.6
+    while len(parts) > 1 and parts[-1] == 0:
+        parts.pop()
+
+    return parts
+
+
 def is_update_available(current_ver, latest_ver):
     """Compares version strings and returns True if an update is available."""
-    if not latest_ver or latest_ver == "Unknown":
+    latest_norm = _normalize_version_string(latest_ver)
+    if latest_norm is None:
         return False
 
-    # Clean 'v' prefix and whitespace
-    c = str(current_ver).strip().lower().lstrip('v')
-    l = str(latest_ver).strip().lower().lstrip('v')
+    current_parts = _version_parts(current_ver)
+    latest_parts = _version_parts(latest_ver)
 
-    try:
-        # Numeric comparison of version components
-        c_parts = [int(x) for x in c.split('.') if x.isdigit()]
-        l_parts = [int(x) for x in l.split('.') if x.isdigit()]
-        return l_parts > c_parts
-    except:
-        # Fallback to simple string comparison
-        return l > c
+    if current_parts is not None and latest_parts is not None:
+        return latest_parts > current_parts
+
+    # Fallback to simple string comparison when numeric parsing fails
+    c = _normalize_version_string(current_ver) or ""
+    l = latest_norm
+    return l > c
 
 
 def get_disk_stats(path):
@@ -75,11 +106,11 @@ def get_portable_apps_metadata(app_folder):
     Parses appinfo.ini for PortableApps.com compliant applications.
     Returns a dictionary with metadata or None if parsing fails.
     """
-    print(f"[DEBUG] Searching for appinfo.ini at path: {app_folder}")
+    logger.debug(f"Searching for appinfo.ini at path: {app_folder}")
     ini_path = os.path.join(app_folder, "App", "AppInfo", "appinfo.ini")
 
     if not os.path.exists(ini_path):
-        print(f"[DEBUG] File NOT found at path.")
+        logger.debug("File NOT found at path.")
         return None
 
     try:
@@ -103,18 +134,18 @@ def get_portable_apps_metadata(app_folder):
             start_exe = config.get('Control', 'start', fallback=None)
 
         if name or version:
-            print(
-                f"[DEBUG] Found metadata in appinfo.ini - Name: {name}, Version: {version}, EXE: {start_exe}")
+            logger.debug(
+                f"Found metadata in appinfo.ini - Name: {name}, Version: {version}, EXE: {start_exe}")
             return {
                 'name': name,
                 'version': version,
                 'start_exe': start_exe
             }
         else:
-            print(
-                f"[DEBUG] Insufficient metadata found. Sections: {config.sections()}")
+            logger.debug(
+                f"Insufficient metadata found. Sections: {config.sections()}")
     except Exception as e:
-        print(f"[UTILS] Error reading {ini_path}: {e}")
+        logger.error(f"Error reading {ini_path}: {e}")
 
     return None
 
@@ -135,6 +166,24 @@ def get_clean_app_name(name):
     cleaned = "".join([c for c in name if c.isalnum()
                       or c.isspace() or c in ('-', '_')])
     return " ".join(cleaned.split()).title()
+
+
+def get_normalized_app_name(name):
+    """Normalizes common PE/folder name variants into a display-friendly app name."""
+    if not name:
+        return ""
+
+    text = str(name)
+    for token in [
+        "_portable", "-portable", ".portable", " portable", " Application",
+        " application", " applications", " app", " installer", " install",
+        " setup", "x64", "x86", "64bit", "32bit", " beta", " preview",
+        " release"
+    ]:
+        text = text.replace(token, "")
+
+    text = text.replace("notepad ++", "Notepad++")
+    return get_clean_app_name(text)
 
 
 def get_safe_folder_path(base_dir, desired_name, current_path=None):
@@ -201,7 +250,7 @@ def get_pe_version(exe_path):
                 ls = fi.FileVersionLS
                 return f"{ms >> 16}.{ms & 0xFFFF}.{ls >> 16}.{ls & 0xFFFF}"
     except ImportError:
-        print("ℹ️ Module 'pefile' missing. Run: pip install pefile")
+        logger.warning("Module 'pefile' missing. Run: pip install pefile")
     except Exception:
         pass
     return None
@@ -211,7 +260,7 @@ def get_pe_name(file_path):
     try:
         pe = pefile.PE(file_path)
         if not hasattr(pe, 'FileInfo'):
-            print("No version info found")
+            logger.warning("No version info found")
 
         # Iterate through the parsed FileInfo structures
         for file_info in pe.FileInfo:
@@ -223,9 +272,9 @@ def get_pe_name(file_path):
                         for key, value in entry.entries.items():
                             key_str = key.decode('utf-8', errors='ignore')
                             if key_str == 'ProductName':
-                                return value.decode('utf-8', errors='ignore')
+                                return get_normalized_app_name(value.decode('utf-8', errors='ignore'))
     except Exception as e:
-        print(f"Error loading file: {e}")
+        logger.error(f"Error loading file: {e}")
     finally:
         pe.close()
     return None

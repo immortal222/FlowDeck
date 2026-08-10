@@ -1,45 +1,36 @@
 import logging
 import os
-import shutil
 import sqlite3
-from datetime import datetime
 
-from PyQt5.QtWidgets import QMessageBox
-
+from core.services.database_backup import DatabaseBackupService
+from core.services.database_recovery import DatabaseRecoveryService
 from core.services.path_manager import PathManager
-from locales.localization import _
 
 logger = logging.getLogger(__name__)
 
 
 class DatabaseManager:
-    """Manages SQLite database connection, schema creation, and CRUD operations."""
+    """Thin facade around SQLite persistence, schema initialization, and recovery."""
 
-    def __init__(self, db_name="flowdeck.db"):
-        # Initialize database path and ensure connection
+    def __init__(self, db_name="flowdeck.db", backup_service=None, recovery_service=None):
         self.db_path = PathManager.get_database_path(db_name)
+        self.backup_service = backup_service or DatabaseBackupService(
+            self.db_path)
+        self.recovery_service = recovery_service or DatabaseRecoveryService(
+            self.db_path)
+        self._ensure_database_health()
+        self.create_tables()
 
-        # 1. Handle missing database file
+    def _ensure_database_health(self):
         if not os.path.exists(self.db_path):
-            if self.has_backups():
-                msg = QMessageBox()
-                msg.setIcon(QMessageBox.Question)
-                msg.setWindowTitle(_("db_restore_title", "Επαναφορά Βάσης"))
-                msg.setText(
-                    _("db_restore_prompt", "Η βάση δεδομένων δεν βρέθηκε, αλλά εντοπίστηκε αντίγραφο ασφαλείας.\n\nΘέλετε να γίνει επαναφορά από το πιο πρόσφατο backup;"))
-                msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
-                msg.setDefaultButton(QMessageBox.Yes)
-
-                if msg.exec_() == QMessageBox.Yes:
-                    self.restore_from_latest_backup()
-
-        # 2. Handle corrupted database file
+            if self.backup_service.has_backups():
+                logger.info(
+                    "Database file missing. Attempting recovery from backup.")
+                self.recovery_service.restore_from_latest_backup()
         elif self.is_corrupted():
             logger.error(
                 "Database file is corrupted. Starting automatic restoration...")
-            self.restore_from_latest_backup()
-
-        self.create_tables()
+            self.recovery_service.restore_from_latest_backup()
 
     def get_connection(self):
         """Returns a new sqlite3 connection."""
@@ -69,74 +60,15 @@ class DatabaseManager:
 
     def has_backups(self):
         """Checks for existing backup files in the backup directory."""
-        backups_dir = os.path.join(os.path.dirname(self.db_path), "backups")
-        if os.path.exists(backups_dir):
-            backups = [f for f in os.listdir(backups_dir) if f.endswith(".db")]
-            return len(backups) > 0
-        return False
+        return self.backup_service.has_backups()
 
     def create_backup(self):
         """Creates a timestamped backup and triggers old backup cleanup."""
-        backups_dir = os.path.join(os.path.dirname(self.db_path), "backups")
-        os.makedirs(backups_dir, exist_ok=True)
-
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_dest = os.path.join(
-            backups_dir, f"flowdeck_backup_{timestamp}.db")
-
-        try:
-            if os.path.exists(self.db_path):
-                shutil.copy2(self.db_path, backup_dest)
-                logger.info(f"Backup created: {backup_dest}")
-                self._cleanup_old_backups(backups_dir)
-                return True
-        except Exception as e:
-            logger.error(f"Failed to create backup: {e}")
-        return False
-
-    def _cleanup_old_backups(self, backups_dir):
-        """Retains only the 5 most recent backup files."""
-        try:
-            backups = sorted([f for f in os.listdir(
-                backups_dir) if f.endswith(".db")])
-
-            while len(backups) > 5:
-                oldest = backups.pop(0)
-                os.remove(os.path.join(backups_dir, oldest))
-                logger.info(f"Removed old backup: {oldest}")
-        except Exception as e:
-            logger.error(f"Error cleaning up old backups: {e}")
+        return self.backup_service.create_backup()
 
     def restore_from_latest_backup(self):
         """Restores the database from the most recent backup file."""
-        backups_dir = os.path.join(os.path.dirname(self.db_path), "backups")
-
-        if not os.path.exists(backups_dir):
-            logger.warning("Backup directory not found.")
-            return False
-
-        backups = [f for f in os.listdir(backups_dir) if f.endswith(".db")]
-        if not backups:
-            logger.warning("No backups available in the directory.")
-            return False
-
-        latest_backup = sorted(backups)[-1]
-        backup_full_path = os.path.join(backups_dir, latest_backup)
-
-        try:
-            corrupted_copy = self.db_path + ".corrupted"
-            if os.path.exists(self.db_path):
-                if os.path.exists(corrupted_copy):
-                    os.remove(corrupted_copy)
-                os.rename(self.db_path, corrupted_copy)
-
-            shutil.copy2(backup_full_path, self.db_path)
-            logger.info(
-                f"Database successfully restored from backup: {latest_backup}")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to restore from backup: {e}")
-            return False
+        return self.recovery_service.restore_from_latest_backup()
 
     def create_tables(self):
         """Initializes the database schema."""
@@ -187,12 +119,8 @@ class DatabaseManager:
                 conn.commit()
                 return True
         except Exception as e:
-            print(
-                f"\n❌ [DATABASE ERROR] Failed to write {name} to the database!")
-            print(f"Error details: {e}\n")
-
             logger.error(
-                f"Error while adding application {name}: {e}", exc_info=True)
+                f"Failed to write {name} to the database.", exc_info=True)
             return False
 
     def get_all_apps(self):
@@ -205,7 +133,7 @@ class DatabaseManager:
                 cursor.execute(query)
                 return [dict(row) for row in cursor.fetchall()]
         except Exception as e:
-            logger.error(f"Σφάλμα κατά την ανάκτηση εφαρμογών: {e}")
+            logger.error(f"Error retrieving applications: {e}")
             return []
 
     def get_app_by_name(self, name):
@@ -268,14 +196,14 @@ class DatabaseManager:
                 cursor.execute(
                     "UPDATE apps SET is_favorite = ? WHERE id = ?", (status, app_id))
                 conn.commit()
-                print(
-                    f"[DB] Success: is_favorite for ID {app_id} changed to {status}")
+                logger.info(
+                    f"is_favorite for ID {app_id} changed to {status}")
 
         except Exception as e:
             error_msg = str(e).lower()
             if "no such column: is_favorite" in error_msg or "has no column" in error_msg:
-                print(
-                    "[DB] Column 'is_favorite' missing. Adding it automatically...")
+                logger.warning(
+                    "Column 'is_favorite' missing. Adding it automatically...")
                 try:
                     with self.get_connection() as conn:
                         cursor = conn.cursor()
@@ -284,12 +212,14 @@ class DatabaseManager:
                         cursor.execute(
                             "UPDATE apps SET is_favorite = ? WHERE id = ?", (status, app_id))
                         conn.commit()
-                        print(
-                            f"[DB] Success after schema update: is_favorite changed to {status}")
+                        logger.info(
+                            f"Success after schema update: is_favorite changed to {status}")
                 except Exception as ex:
-                    print(f"[DB ERROR] Failed to update schema or entry: {ex}")
+                    logger.error(
+                        f"Failed to update schema or entry: {ex}", exc_info=True)
             else:
-                print(f"[DB ERROR] Error toggling favorite status: {e}")
+                logger.error(
+                    f"Error toggling favorite status: {e}", exc_info=True)
 
     def update_app_details(self, app_id, name, version, exe_path):
         """Updates basic application details for repair or edit purposes."""

@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import shutil
 import subprocess
@@ -8,8 +9,11 @@ import tempfile
 import win32com.client
 from PyQt5.QtCore import QObject, pyqtSignal
 
+from core.services.config_manager import ConfigManager
 from core.services.path_manager import PathManager
 from locales.localization import _
+
+logger = logging.getLogger(__name__)
 
 
 class BackupManager(QObject):
@@ -23,9 +27,10 @@ class BackupManager(QObject):
     # Conflict signals: Name, Zip Version, DB Version, Message
     ask_user_conflict = pyqtSignal(str, str, str, str)
 
-    def __init__(self, db_manager):
+    def __init__(self, db_manager, config_manager=None):
         super().__init__()
         self.db = db_manager
+        self.config = config_manager if config_manager is not None else ConfigManager()
 
     def get_folder_size(self, path):
         """Calculates total directory size in bytes."""
@@ -42,9 +47,9 @@ class BackupManager(QObject):
     def export_to_zip(self, selected_apps, output_zip_path):
         """Exports selected applications to a compressed archive using 7za.exe."""
 
-        print("\n=== [DEBUG] STARTING EXPORT PROCESS WITH 7-ZIP ===")
-        print(f"[DEBUG] Output path: {output_zip_path}")
-        print(f"[DEBUG] Apps for export: {selected_apps}")
+        logger.debug("STARTING EXPORT PROCESS WITH 7-ZIP")
+        logger.debug(f"Output path: {output_zip_path}")
+        logger.debug(f"Apps for export: {selected_apps}")
 
         if not selected_apps:
             self.finished.emit(
@@ -62,17 +67,11 @@ class BackupManager(QObject):
             return
 
         # Read and include Settings (excluding local install_path)
-        app_config = {}
-        try:
-            config_path = PathManager.get_config_path()
-            if os.path.exists(config_path):
-                with open(config_path, "r", encoding="utf-8") as f:
-                    full_config = json.load(f)
-                    for key, value in full_config.items():
-                        if key != "install_path":
-                            app_config[key] = value
-        except Exception as e:
-            print(f"[DEBUG] Error reading config.json: {e}")
+        app_config = {
+            key: value
+            for key, value in self.config.items()
+            if key != "install_path"
+        }
 
         manifest_data = {
             "wizard_version": "1.0",
@@ -81,7 +80,7 @@ class BackupManager(QObject):
         }
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            print(f"[DEBUG] Created temporary working directory: {temp_dir}")
+            logger.debug(f"Created temporary working directory: {temp_dir}")
 
             for index, item in enumerate(selected_apps):
                 app_name = item.get("name") if isinstance(item, dict) else item
@@ -90,16 +89,16 @@ class BackupManager(QObject):
 
                 app_info = self.db.get_app_by_name(app_name)
                 if not app_info:
-                    print(
-                        f"[DEBUG] Application '{app_name}' not found in database.")
+                    logger.warning(
+                        f"Application '{app_name}' not found in database.")
                     continue
 
                 full_local_path = app_info.get("local_path")
                 full_exe_path = app_info.get("exe_path")
 
                 if not full_local_path or not os.path.isdir(full_local_path):
-                    print(
-                        f"[DEBUG] Directory '{full_local_path}' does not exist.")
+                    logger.warning(
+                        f"Directory '{full_local_path}' does not exist.")
                     continue
 
                 # Calculate Portable relative paths
@@ -128,8 +127,8 @@ class BackupManager(QObject):
                 try:
                     shutil.copytree(full_local_path, dest_temp_app_folder)
                 except Exception as e:
-                    print(
-                        f"[DEBUG] Error during temporary copy of {app_name}: {e}")
+                    logger.warning(
+                        f"Error during temporary copy of {app_name}: {e}")
                     continue
 
                 progress = int((index + 1) / total_apps * 40)
@@ -172,7 +171,7 @@ class BackupManager(QObject):
                     os.path.join(temp_dir, "*")
                 ]
 
-                print(f"[DEBUG] Executing command: {' '.join(command)}")
+                logger.debug(f"Executing command: {' '.join(command)}")
 
                 startupinfo = None
                 if sys.platform == "win32":
@@ -191,45 +190,41 @@ class BackupManager(QObject):
                 stdout, stderr = process.communicate()
 
                 if process.returncode == 0:
-                    print("[DEBUG] 7-Zip compression completed successfully!")
+                    logger.info("7-Zip compression completed successfully.")
                     self.progress_changed.emit(100)
                     self.finished.emit(
                         True, _("bak_msg_export_success", "Export completed successfully via 7-Zip!\nFile: {filename}").format(filename=os.path.basename(output_zip_path)))
                 else:
-                    print(
-                        f"[DEBUG] 7-Zip returned error code {process.returncode}: {stderr}")
+                    logger.error(
+                        f"7-Zip returned error code {process.returncode}: {stderr}")
                     self.finished.emit(
                         False, _("bak_err_7z_error", "7-Zip error: {error}").format(error=stderr if stderr else stdout))
 
             except Exception as e:
-                print(
-                    f"[DEBUG] Critical error during 7z subprocess execution: {e}")
+                logger.error(
+                    f"Critical error during 7z subprocess execution: {e}", exc_info=True)
                 self.finished.emit(False, _(
                     "bak_err_7z_call_fail", "7-Zip call failed: {error}").format(error=str(e)))
 
     def _import_app_settings(self, imported_config):
         """Merges imported settings into the local configuration, excluding local-specific paths."""
         try:
-            config_path = PathManager.get_config_path()
-            if os.path.exists(config_path):
-                with open(config_path, "r", encoding="utf-8") as f:
-                    local_config = json.load(f)
+            if self.config is None:
+                self.config = ConfigManager()
 
-                for key, value in imported_config.items():
-                    if key != "install_path":
-                        local_config[key] = value
-
-                with open(config_path, "w", encoding="utf-8") as f:
-                    json.dump(local_config, f, indent=4, ensure_ascii=False)
-                print("[DEBUG] Application settings imported successfully!")
+            for key, value in imported_config.items():
+                if key != "install_path":
+                    self.config[key] = value
+            self.config.save()
+            logger.debug("Application settings imported successfully.")
         except Exception as e:
-            print(f"[DEBUG] Error during settings import: {e}")
+            logger.error(f"Error during settings import: {e}", exc_info=True)
 
     def import_from_zip(self, source_path, dest_path, selected_apps, import_settings=False):
         """Restores selected applications from a backup archive."""
 
-        print(f"\n=== [DEBUG] STARTING IMPORT PROCESS ===")
-        print(f"[DEBUG] File: {source_path}")
+        logger.debug("STARTING IMPORT PROCESS")
+        logger.debug(f"File: {source_path}")
 
         if not selected_apps:
             self.finished.emit(
@@ -296,8 +291,8 @@ class BackupManager(QObject):
                 app_info = next(
                     (app for app in apps_in_manifest if app["name"] == app_name), None)
                 if not app_info:
-                    print(
-                        f"[DEBUG] Application {app_name} not found in manifest.")
+                    logger.warning(
+                        f"Application {app_name} not found in manifest.")
                     continue
 
                 source_app_dir = os.path.join(temp_dir, app_info["local_path"])
@@ -324,8 +319,8 @@ class BackupManager(QObject):
                         homepage=app_info.get("homepage", "")
                     )
                 except Exception as db_err:
-                    print(
-                        f"[DEBUG] Error adding {app_name} to database: {db_err}")
+                    logger.error(
+                        f"Error adding {app_name} to database: {db_err}", exc_info=True)
 
                 # Register shortcuts
                 try:
@@ -346,11 +341,11 @@ class BackupManager(QObject):
                         shortcut.WorkingDirectory = os.path.normpath(
                             new_local_path)
                         shortcut.save()
-                        print(
-                            f"[DEBUG] Created shortcut (win32com): {app_info['name']} -> {shortcut_path}")
+                        logger.debug(
+                            f"Created shortcut (win32com): {app_info['name']} -> {shortcut_path}")
                 except Exception as link_err:
-                    print(
-                        f"[DEBUG] Error creating shortcut for {app_info['name']}: {link_err}")
+                    logger.warning(
+                        f"Error creating shortcut for {app_info['name']}: {link_err}")
 
                 progress = 40 + int((index + 1) / total_apps * 50)
                 self.progress_changed.emit(progress)

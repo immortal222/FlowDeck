@@ -3,6 +3,7 @@ import logging
 import os
 import random
 
+from core.services.config_manager import ConfigManager
 from core.services.path_manager import PathManager
 from locales.localization import get_current_lang
 from ui.styles.styles import TIPS_THEMES
@@ -13,8 +14,9 @@ logger = logging.getLogger(__name__)
 class TipsManager:
     """Manages the random selection and rendering of helpful tips on the Dashboard."""
 
-    def __init__(self, ui_widget):
+    def __init__(self, ui_widget, config_manager=None):
         self.ui_widget = ui_widget
+        self.config = config_manager if config_manager is not None else ConfigManager()
 
         # Tips file location resolved via PathManager
         self.json_path = PathManager.get_tips_path()
@@ -47,14 +49,7 @@ class TipsManager:
             selected_tip = random.choice(tips_list)
 
             # Apply theme-specific text coloring
-            theme_name = "Modern Dark"
-            config_path = PathManager.get_config_path()
-            if os.path.exists(config_path):
-                try:
-                    with open(config_path, "r", encoding="utf-8") as f:
-                        theme_name = json.load(f).get("theme", "Modern Dark")
-                except:
-                    pass
+            theme_name = self.config.get("theme", "Modern Dark")
 
             txt_color = TIPS_THEMES.get(theme_name, "#DBE5EB")
 

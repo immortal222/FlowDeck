@@ -26,7 +26,7 @@ class ChocolateyAPI:
             }
 
             try:
-                print(f"\n[DEBUG CHOCO] Searching at: {url}")
+                logger.debug(f"Searching at: {url}")
                 response = requests.get(url, headers=headers, timeout=15)
 
                 if response.status_code == 200:
@@ -43,8 +43,7 @@ class ChocolateyAPI:
                         download_match = re.search(r'src="([^"]+)"', text)
 
                         if version_match:
-                            print(
-                                f"[DEBUG CHOCO] Success! Found as: {choco_id}")
+                            logger.debug(f"Success! Found as: {choco_id}")
                             return {
                                 "name": app_name.title(),
                                 "version": version_match.group(1),
@@ -54,13 +53,12 @@ class ChocolateyAPI:
                                 "source": "chocolatey"
                             }
             except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
-                print(
-                    f"[DEBUG CHOCO] Server is down or unreachable for Chocolatey: {e}")
+                logger.warning(
+                    f"Server is down or unreachable for Chocolatey: {e}")
                 return "SERVER_ERROR"
             except Exception as e:
-                print(
-                    f"[DEBUG CHOCO] Error while searching for {choco_id}: {e}")
+                logger.error(f"Error while searching for {choco_id}: {e}")
 
-        print(
-            "[DEBUG CHOCO] Application not found in portable formats (.portable / -portable).")
+        logger.debug(
+            "Application not found in portable formats (.portable / -portable).")
         return None

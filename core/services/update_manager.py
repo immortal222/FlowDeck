@@ -1,4 +1,3 @@
-import json
 import logging
 import socket
 from datetime import datetime, timedelta
@@ -14,7 +13,15 @@ logger = logging.getLogger(__name__)
 
 
 class UpdateManager(QObject):
-    """Coordinates background update checks and user notifications."""
+    """Coordinates background and manual update checks with clear separation of concerns.
+
+    Responsibilities:
+    1. Fetch application metadata from the database
+    2. Validate network connectivity before performing update checks
+    3. Start the worker that retrieves online version metadata
+    4. Notify UI / refresh application views after completion
+    5. Track background vs manual check behavior separately
+    """
 
     def __init__(self, main_window, db):
         super().__init__()
@@ -23,134 +30,162 @@ class UpdateManager(QObject):
         self.is_manual_check = False
         self.update_worker = None
         self.updates_found = 0
-        self._apps_cache = []  # Cache for faster version comparison
+        self._apps_cache = []
+        self.last_check_time = None
+        self.status = "idle"
+        self.last_check_summary = ""
 
     def automatic_check_on_startup(self, config, settings_controller):
         """Executes automatic checks based on configured frequency."""
-        # Background check logic depends on frequency settings
-
         frequency = config.get("update_freq", "On Startup")
 
-        if frequency == "Manual Only" or frequency == "Χειροκίνητα":
+        if frequency in ("Manual Only", "Χειροκίνητα"):
             logger.info(
                 "Update frequency set to Manual. Skipping startup check.")
             return
 
-        elif frequency == "On Startup" or frequency == "Κάθε εκκίνηση":
+        if frequency in ("On Startup", "Κάθε εκκίνηση"):
             logger.info("Update frequency set to Each Boot. Starting check...")
             self.check_for_updates(manual=False)
             self._save_last_check_time(settings_controller)
+            return
 
-        elif frequency == "Every 24 Hours" or frequency == "Κάθε 24 ώρες":
-            last_check_str = config.get("last_update_check", "")
-
-            if last_check_str:
-                try:
-                    last_check_time = datetime.fromisoformat(last_check_str)
-                    if datetime.now() >= last_check_time + timedelta(hours=24):
-                        logger.info(
-                            "24 hours have passed since last check. Starting check...")
-                        self.check_for_updates(manual=False)
-                        self._save_last_check_time(settings_controller)
-                    else:
-                        logger.info(
-                            "24 hours have not passed yet. Skipping update check.")
-                except Exception as e:
-                    logger.error(
-                        f"Error parsing last_update_check timestamp: {e}")
-                    self.check_for_updates(manual=False)
-                    self._save_last_check_time(settings_controller)
-            else:
+        if frequency in ("Every 24 Hours", "Κάθε 24 ώρες"):
+            if self._should_run_24h_check(config):
                 logger.info(
-                    "No previous check timestamp found. Starting first check...")
+                    "24 hours have passed since last check. Starting check...")
                 self.check_for_updates(manual=False)
                 self._save_last_check_time(settings_controller)
+            else:
+                logger.info(
+                    "24 hours have not passed yet. Skipping update check.")
+
+    def _should_run_24h_check(self, config):
+        last_check_str = config.get("last_update_check", "")
+        if not last_check_str:
+            logger.info(
+                "No previous check timestamp found. Starting first check...")
+            return True
+
+        try:
+            last_check_time = datetime.fromisoformat(last_check_str)
+            return datetime.now() >= last_check_time + timedelta(hours=24)
+        except Exception as e:
+            logger.error(f"Error parsing last_update_check timestamp: {e}")
+            return True
 
     def _save_last_check_time(self, settings_controller):
-        """Helper function to persist the last check timestamp in config.json."""
+        """Persist the last update check timestamp in config.json."""
         try:
             settings_controller.config["last_update_check"] = datetime.now(
             ).isoformat()
-            with open(settings_controller.config_file, "w", encoding="utf-8") as f:
-                json.dump(settings_controller.config, f,
-                          indent=4, ensure_ascii=False)
+            settings_controller.config.save()
         except Exception as e:
             logger.error(f"Failed to save last update check timestamp: {e}")
 
     def check_for_updates(self, manual=False):
-        """Starts the update check with network connectivity validation."""
+        """Starts the update check process, manual or background."""
         self.is_manual_check = manual
         self.updates_found = 0
-        apps_list = self.db.get_all_apps()
+        self._apps_cache = []
+        self.status = "checking"
+        self.last_check_time = datetime.now()
+        self.last_check_summary = ""
 
-        # Log check event to activity timeline
+        apps_list = self._get_installed_apps()
+        self._log_update_check()
+
+        if not apps_list:
+            self._notify_no_apps_found()
+            self.status = "idle"
+            return
+
+        if not self._has_network_connection():
+            self._notify_network_missing()
+            self.status = "idle"
+            self.is_manual_check = False
+            return
+
+        self._apps_cache = apps_list
+        self._start_worker(apps_list)
+
+    def _get_installed_apps(self):
+        try:
+            return self.db.get_all_apps()
+        except Exception as e:
+            logger.error(f"Error reading installed apps from database: {e}")
+            return []
+
+    def _log_update_check(self):
         if hasattr(self.main_window, 'activity_manager'):
             self.main_window.activity_manager.log(
                 "log_update_check", event_type="update")
 
-        if not apps_list:
-            if self.is_manual_check:
-                msg = create_styled_msgbox(
-                    self.main_window,
-                    _("upd_title_warning", "Warning"),
-                    _("upd_no_apps", "No installed applications found in database."),
-                    is_warning=True
-                )
-                ok_button = msg.button(QMessageBox.Ok)
-                if ok_button:
-                    ok_button.setObjectName("primaryButton")
-
-                msg.exec_()
-            return
-
-        # Network Safety: Verify active internet connection
+    def _has_network_connection(self):
         try:
-            # Fast connection attempt to Google DNS
             socket.setdefaulttimeout(2)
-            socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect(
-                ("8.8.8.8", 53))
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.connect(("8.8.8.8", 53))
+            sock.close()
             logger.info(
                 "Internet connection detected. Proceeding with update check.")
-        except (socket.error, Exception):
+            return True
+        except Exception:
             logger.warning(
                 "No internet connection. Update check aborted to protect local database.")
+            return False
 
-            # Αν ο έλεγχος πατήθηκε χειροκίνητα, ενημερώνουμε τον χρήστη
-            if self.is_manual_check:
-                msg = create_styled_msgbox(
-                    self.main_window,
-                    _("upd_title_error", "Network Error"),
-                    _("upd_no_internet_text",
-                      "No internet connection detected.\nPlease check your connection and try again."),
-                    is_warning=True
-                )
-                msg.setStandardButtons(QMessageBox.Ok)
-                ok_button = msg.button(QMessageBox.Ok)
-                if ok_button:
-                    ok_button.setObjectName("primaryButton")
-                msg.exec_()
-
-            self.is_manual_check = False
+    def _notify_no_apps_found(self):
+        if not self.is_manual_check:
             return
 
-        # Populate cache for update comparison
-        self._apps_cache = apps_list
-        self.update_worker = UpdateCheckWorker(apps_list, self.db)
+        msg = create_styled_msgbox(
+            self.main_window,
+            _("upd_title_warning", "Warning"),
+            _("upd_no_apps", "No installed applications found in database."),
+            is_warning=True
+        )
+        ok_button = msg.button(QMessageBox.Ok)
+        if ok_button:
+            ok_button.setObjectName("primaryButton")
+        msg.exec_()
 
-        # Connect signals
+    def _notify_network_missing(self):
+        if not self.is_manual_check:
+            return
+
+        msg = create_styled_msgbox(
+            self.main_window,
+            _("upd_title_error", "Network Error"),
+            _(
+                "upd_no_internet_text",
+                "No internet connection detected.\nPlease check your connection and try again."
+            ),
+            is_warning=True
+        )
+        msg.setStandardButtons(QMessageBox.Ok)
+        ok_button = msg.button(QMessageBox.Ok)
+        if ok_button:
+            ok_button.setObjectName("primaryButton")
+        msg.exec_()
+
+    def _start_worker(self, apps_list):
+        self.update_worker = UpdateCheckWorker(apps_list, self.db)
         self.update_worker.app_checked.connect(self.track_updates)
         self.update_worker.finished.connect(self.on_check_finished)
         self.update_worker.start()
 
-    def track_updates(self, name, has_update, latest_ver):
+    def track_updates(self, update_result):
         """Monitors worker results and increments update counter."""
-        # Use cache to avoid redundant database queries
+        name = update_result.get("name", "")
+        has_update = update_result.get("has_update", False)
+        latest_ver = update_result.get("latest_version")
+
         for app in self._apps_cache:
-            # Case-insensitive name resolution
             if str(app.get("name")).lower() == str(name).lower():
-                # Normalize current and latest versions for comparison
-                current = str(app.get("current_version", app.get(
-                    "ver", "1.0"))).strip().lower().lstrip('v')
+                current = str(
+                    app.get("current_version", app.get("ver", "1.0")))
+                current = current.strip().lower().lstrip('v')
 
                 if not latest_ver:
                     logger.debug(
@@ -158,46 +193,54 @@ class UpdateManager(QObject):
                     break
 
                 latest = str(latest_ver).strip().lower().lstrip('v')
-
                 logger.debug(
                     f"Comparing {name}: Current v{current} vs Latest v{latest}")
 
-                # Prevent false positives on empty or unknown versions
-                if current != latest and latest not in ["", "none", "unknown"]:
+                if has_update:
                     self.updates_found += 1
                     logger.info(f"UPDATE FOUND for {name}!")
                 break
 
     def on_check_finished(self):
         """Cleanup and UI notification upon thread completion."""
+        self.status = "completed"
+
         if hasattr(self.main_window, 'my_apps_controller'):
             self.main_window.my_apps_controller.refresh_data()
 
-        # Determine notification visibility based on user preference
+        self._show_completion_dialog()
+        self._apps_cache = []
+        self.is_manual_check = False
+
+    def _show_completion_dialog(self):
         is_silent = True
         if hasattr(self.main_window, 'settings_controller'):
             is_silent = self.main_window.settings_controller.config.get(
                 "silent_updater", True)
 
-        # Show dialog for manual checks or if silent mode is off and updates were found
-        if self.is_manual_check or (not is_silent and self.updates_found > 0):
-            title = _("upd_title_success", "Update Check")
-            if self.updates_found > 0:
-                text = _("upd_found_text", "Update check complete! Found {count} updates.").format(
-                    count=self.updates_found)
-            else:
-                text = _("upd_not_found_text",
-                         "Update check complete! All applications are up to date.")
+        if not self.is_manual_check and is_silent and self.updates_found == 0:
+            return
 
-            msg = create_styled_msgbox(
-                self.main_window, title, text, is_warning=False)
+        title = _("upd_title_success", "Update Check")
+        if self.updates_found > 0:
+            text = _(
+                "upd_found_text",
+                "Update check complete! Found {count} updates."
+            ).format(count=self.updates_found)
+        else:
+            text = _(
+                "upd_not_found_text",
+                "Update check complete! All applications are up to date."
+            )
 
-            ok_button = msg.button(QMessageBox.Ok)
-            if ok_button:
-                ok_button.setObjectName("primaryButton")
+        msg = create_styled_msgbox(
+            self.main_window, title, text, is_warning=False)
 
-            msg.exec_()
+        ok_button = msg.button(QMessageBox.Ok)
+        if ok_button:
+            ok_button.setObjectName("primaryButton")
+        msg.exec_()
 
-        # Reset state
-        self._apps_cache = []
-        self.is_manual_check = False
+    @property
+    def has_pending_updates(self):
+        return self.updates_found > 0
