@@ -1,39 +1,77 @@
+from ui.styles.styles import DIALOG_STYLE, DIALOG_LIGHT_STYLE
+from locales.ui_localizer import localize_wizard_page
+from locales.localization import _
+from core.utils import get_portable_apps_metadata, is_internet_available, get_pe_version, get_pe_name
+from core.services.path_manager import PathManager
+from core.services.installer import AppInstaller
+from core.api.scoop_api import ScoopAPI
+from core.api.chocolatey_api import ChocolateyAPI
 import hashlib
+from difflib import SequenceMatcher
+import logging
 import os
 import platform
 import re
 import shutil
 import subprocess
 import webbrowser
+import unicodedata
 import zipfile
-import pefile
 
 import requests
 import win32com.client
 from PyQt5.QtCore import QEvent, QObject, QSize, Qt
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import (QApplication, QDialog, QFileDialog, QHBoxLayout,
-                             QInputDialog, QLabel, QLineEdit, QMessageBox,
+                             QLabel, QLineEdit, QMessageBox,
                              QPushButton, QVBoxLayout, QComboBox)
 
-from core.api.chocolatey_api import ChocolateyAPI
-from core.api.scoop_api import ScoopAPI
-from core.services.installer import AppInstaller
-from core.services.path_manager import PathManager
-from core.utils import get_portable_apps_metadata, is_internet_available, get_pe_version, get_pe_name
-from locales.localization import _
-from locales.ui_localizer import localize_wizard_page
-from ui.styles.styles import DIALOG_STYLE, DIALOG_LIGHT_STYLE
+logger = logging.getLogger(__name__)
+
+
+def _normalize_install_name(value):
+    if not value:
+        return ""
+
+    text = unicodedata.normalize("NFKC", str(value)).lower()
+    text = text.replace("notepad ++", "notepad++")
+    text = re.sub(r"\.(exe|lnk|app)$", "", text)
+    text = re.sub(r"[+_\-./()]+", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+
+    ignored_tokens = {
+        "app", "application", "portable", "edition", "media", "player",
+        "setup", "installer", "x64", "x86", "64bit", "32bit"
+    }
+    tokens = [token for token in text.split() if token not in ignored_tokens]
+    return "".join(tokens)
+
+
+def _score_install_name_match(left, right):
+    left_norm = _normalize_install_name(left)
+    right_norm = _normalize_install_name(right)
+
+    if not left_norm or not right_norm:
+        return 0.0
+    if left_norm == right_norm:
+        return 1.0
+
+    ratio = SequenceMatcher(None, left_norm, right_norm).ratio()
+    if left_norm in right_norm or right_norm in left_norm:
+        ratio = max(ratio, 0.92)
+    return ratio
 
 
 class UnifiedInstallDialog(QDialog):
     """Single unified dialog for confirming App Name, Version, and Executable."""
 
-    def __init__(self, app_name, version, exes, scoop_ver, parent=None):
+    def __init__(self, app_name, version, exes, scoop_ver, db=None, parent=None):
         super().__init__(parent)
         self.setWindowTitle(
             _("wiz_confirm_title", "Confirm Installation Details"))
         self.setMinimumWidth(450)
+        self.db = db
+        self.suggested_db_name = None
 
         # Apply dynamic theme styling
         theme = "Modern Dark"
@@ -49,6 +87,8 @@ class UnifiedInstallDialog(QDialog):
         layout.addWidget(QLabel(_("wiz_step2_msg", "Application Name:")))
         self.name_input = QLineEdit(app_name)
         layout.addWidget(self.name_input)
+
+        self._setup_db_name_suggestion(layout, app_name)
 
         # 2. Version
         layout.addWidget(QLabel(_("wiz_step5_title", "Version:")))
@@ -84,6 +124,45 @@ class UnifiedInstallDialog(QDialog):
         btn_layout.addWidget(self.btn_next)
         btn_layout.addWidget(self.btn_cancel)
         layout.addLayout(btn_layout)
+
+    def _setup_db_name_suggestion(self, layout, app_name):
+        if not self.db or not hasattr(self.db, "get_all_apps"):
+            return
+
+        best_match = None
+        best_score = 0.0
+
+        try:
+            for app in self.db.get_all_apps():
+                db_name = app.get("name", "")
+                score = _score_install_name_match(app_name, db_name)
+                if score > best_score:
+                    best_score = score
+                    best_match = db_name
+        except Exception:
+            return
+
+        if not best_match or best_score < 0.88:
+            return
+
+        self.suggested_db_name = best_match
+
+        hint_layout = QHBoxLayout()
+        self.db_match_label = QLabel(
+            _("wiz_db_name_found", f"Βρέθηκε το όνομα '{best_match}' στη βάση."))
+        self.db_match_label.setWordWrap(True)
+        hint_layout.addWidget(self.db_match_label, 1)
+
+        self.btn_use_db_name = QPushButton(_("wiz_change", "Αλλαγή"))
+        self.btn_use_db_name.setObjectName("secondaryButton")
+        self.btn_use_db_name.clicked.connect(self.use_database_name)
+        hint_layout.addWidget(self.btn_use_db_name, 0)
+
+        layout.addLayout(hint_layout)
+
+    def use_database_name(self):
+        if self.suggested_db_name:
+            self.name_input.setText(self.suggested_db_name)
 
     def get_data(self):
         return (
@@ -618,7 +697,7 @@ class WizardController(QObject):
         detected_name = pe_name if pe_name else detected_name
         self.ui.appNameInput.setText(detected_name)
 
-        print(f"Detected Name: {detected_name}, PE Name: {pe_name}")
+        logger.debug(f"Detected Name: {detected_name}, PE Name: {pe_name}")
 
         # 5. SCOOP CHECK
         self.log(_("wiz_log_searching_scoop", "Searching Scoop for '{app_name}' info...").format(
@@ -640,9 +719,9 @@ class WizardController(QObject):
             self.log(_("wiz_log_scoop_not_found",
                      "Application not found in Scoop API."))
 
-        # 6. SHOW SINGLE UNIFIED DIALOG (New Feature)
+        # 6. SHOW SINGLE UNIFIED DIALOG
         dialog = UnifiedInstallDialog(
-            detected_name, initial_ver, clean_names, scoop_ver, self.main_window)
+            detected_name, initial_ver, clean_names, scoop_ver, self.db, self.main_window)
         if dialog.exec_() == QDialog.Accepted:
             final_name, final_version, final_exe_rel = dialog.get_data()
 
@@ -900,14 +979,14 @@ class WizardController(QObject):
                          "✅ File is already local, skipping download..."))
 
             # ==============================================================
-            # ΕΛΕΓΧΟΣ ΑΚΕΡΑΙΟΤΗΤΑΣ CHECKSUM (HASH VALIDATION)
+            # CHECKSUM INTEGRITY CHECK (HASH VALIDATION)
             # ==============================================================
             if expected_hash and os.path.exists(save_path) and not save_path.endswith('.nupkg'):
                 clean_expected = str(expected_hash).strip().lower()
                 if ":" in clean_expected:
                     clean_expected = clean_expected.split(":")[-1]
 
-                # Αυτόματη ανίχνευση αλγορίθμου βάσει του μήκους του hash
+                # Automatically detect the algorithm based on the hash length
                 hash_len = len(clean_expected)
                 algo_name = "SHA-256"
                 if hash_len == 64:
@@ -922,25 +1001,25 @@ class WizardController(QObject):
                 else:
                     hasher = hashlib.sha256()
 
-                # --- ΕΜΦΑΝΙΣΗ ΣΤΗΝ ΚΟΝΣΟΛΑ ---
+                # --- DISPLAY IN THE CONSOLE ---
                 self.log(_("wiz_log_security_check", "🔒 Checking integrity (Algorithm: {algo})...").format(
                     algo=algo_name))
                 self.log(_("wiz_log_expected_hash", "📋 Expected Hash (Online API): {hash_val}").format(
                     hash_val=clean_expected))
 
-                # Υπολογισμός του Hash του αρχείου που κατεβάσαμε
+                # Calculate the hash of the downloaded file
                 with open(save_path, "rb") as f:
                     for byte_block in iter(lambda: f.read(8192), b""):
                         hasher.update(byte_block)
                 calculated_hash = hasher.hexdigest().lower()
 
-                # --- ΕΜΦΑΝΙΣΗ ΑΠΟΤΕΛΕΣΜΑΤΟΣ ΣΤΗΝ ΚΟΝΣΟΛΑ ---
+                # --- DISPLAY THE RESULT IN THE CONSOLE ---
                 self.log(_("wiz_log_calculated_hash", "🧮 Calculated Hash (Local File): {hash_val}").format(
                     hash_val=calculated_hash))
 
                 if calculated_hash != clean_expected:
                     self.log(_("wiz_err_checksum_mismatch",
-                             "❌ ΚΡΙΣΙΜΟ ΣΦΑΛΜΑ ΑΣΦΑΛΕΙΑΣ: Τα Checksums ΔΕΝ ταιριάζουν! Η εγκατάσταση ακυρώθηκε."))
+                             "❌ CRITICAL SECURITY ERROR: Checksums DO NOT match! Installation aborted."))
                     self.update_sidebar(app_name, None, _(
                         "wiz_status_hash_error", "❌ Hash Error"))
                     return
@@ -951,8 +1030,8 @@ class WizardController(QObject):
                 self.log(_("wiz_log_warn_no_checksum",
                          "⚠️ Warning: No checksum found in API. Skipping check."))
 
-            # 5. Αποσυμπίεση
-            self.log(_("wiz_log_extracting_7zip", "Αποσυμπίεση με το 7-Zip..."))
+            # 5. Extraction
+            self.log(_("wiz_log_extracting_7zip", "Extracting with 7-Zip..."))
             installer = AppInstaller(self.portable_root)
             extracted_folder = installer.install_from_zip(save_path, app_name)
 
@@ -962,7 +1041,7 @@ class WizardController(QObject):
                 return
 
             # =================================================================
-            # 🛡️ ΑΥΤΟΜΑΤΟΣ ΜΗΧΑΝΙΣΜΟΣ EXTRACTION ΣΤΟΝ ΚΕΝΤΡΙΚΟ ΦΑΚΕΛΟ 7ZIP
+            # 🛡️ AUTOMATIC EXTRACTION MECHANISM INTO THE MAIN 7ZIP FOLDER
             # =================================================================
             tools_dir = os.path.join(extracted_folder, "tools")
             if os.path.exists(tools_dir):
@@ -972,10 +1051,10 @@ class WizardController(QObject):
                 if os.path.exists(file_32) or os.path.exists(file_64):
                     self.log(_("wiz_log_choc_container_found",
                              "📦 Chocolatey container found. Performing clean SFX extraction..."))
-                    print(_("wiz_console_7za_extract",
-                          "\n🚀 [FLOWDECK] Extraction του 7-Zip με 7za!"))
+                    logger.info(_("wiz_console_7za_extract",
+                                  "\n🚀 [FLOWDECK] Extraction του 7-Zip με 7za!"))
 
-                    # Επιλογή 64-bit ή 32-bit ανάλογα με το σύστημα
+                    # Select 64-bit or 32-bit depending on the system
                     is_64bit = platform.machine().endswith(
                         '64') or os.environ.get("PROCESSOR_ARCHITEW6432")
                     target_sfx = file_64 if (
@@ -983,39 +1062,40 @@ class WizardController(QObject):
 
                     if os.path.exists(target_sfx):
                         try:
-                            # Χρήση του PathManager για το 7za.exe
+                            # Use PathManager to locate 7za.exe
                             seven_za_path = PathManager.get_bin_path("7za.exe")
 
                             if not seven_za_path:
                                 raise FileNotFoundError(
                                     _("wiz_err_7za_not_found", "The 7za.exe was not found in the project!"))
 
-                            print(_("wiz_console_7za_found", "🎯 The 7za.exe was found at: {path}").format(
+                            logger.info(_("wiz_console_7za_found", "🎯 The 7za.exe was found at: {path}").format(
                                 path=seven_za_path))
 
-                            # 2. ΑΠΟΣΥΜΠΙΕΣΗ ΚΑΤΕΥΘΕΙΑΝ ΣΤΟΝ ΦΑΚΕΛΟ 7ZIP
+                            # 2. EXTRACT DIRECTLY INTO THE 7ZIP FOLDER
                             target_dir_abs = os.path.abspath(extracted_folder)
                             target_sfx_abs = os.path.abspath(target_sfx)
-                            print(_("wiz_console_sfx_unzipping", "📦 Unzipping του {file_name} στον κεντρικό φάκελο: {dest_dir}").format(
+                            logger.info(_("wiz_console_sfx_unzipping", "📦 Unzipping του {file_name} στον κεντρικό φάκελο: {dest_dir}").format(
                                 file_name=os.path.basename(target_sfx),
                                 dest_dir=target_dir_abs
                             ))
 
                             subprocess.run(
                                 [seven_za_path, "x", target_sfx_abs, f"-o{target_dir_abs}", "-y"], check=True)
-                            print(
+                            logger.info(
                                 _("wiz_console_sfx_success", "✅ The SFX extraction completed successfully!"))
 
-                            # 3. ΚΑΘΑΡΙΣΜΟΣ: Σβήνουμε τελείως τον φάκελο tools
+                            # 3. CLEANUP: remove the tools folder completely
                             shutil.rmtree(tools_dir, ignore_errors=True)
                             self.log(_("wiz_log_internal_extract_success",
                                      "✨ The internal extraction completed and the tools folder was cleaned!"))
                         except Exception as e:
                             self.log(
                                 _("wiz_log_extract_err", "❌ Error occurred during extraction: {error}").format(error=e))
-                            print(_("wiz_console_extract_fail", "❌ EXTRACTION FAILED WITH 7ZA: {error}").format(
+                            logger.error(_("wiz_console_extract_fail", "❌ EXTRACTION FAILED WITH 7ZA: {error}").format(
                                 error=e))
-            print("==================================================\n")
+            logger.debug(
+                "==================================================\n")
             # =================================================================
 
             final_exe_path = None
@@ -1082,7 +1162,7 @@ class WizardController(QObject):
                 self.update_sidebar(app_name, app_data, version)
 
                 if hasattr(self.main_window, 'activity_manager'):
-                    print(f"DEBUG: Logging install success for {app_name}")
+                    logger.debug(f"Logging install success for {app_name}")
 
                     self.main_window.activity_manager.log(
                         "wiz_act_install_success",
@@ -1111,6 +1191,6 @@ class WizardController(QObject):
                 if nupkg_path and os.path.exists(nupkg_path):
                     os.remove(nupkg_path)
             except Exception as e:
-                print(f"Post-install cleanup error: {e}")
+                logger.error(f"Post-install cleanup error: {e}")
 
             self._is_installing = False

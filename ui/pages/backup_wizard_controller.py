@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import shutil
 import subprocess
@@ -17,6 +18,8 @@ from ui.styles.style_export import (EXPORT_DARK_WIZARD_STYLE,
                                     EXPORT_LIGHT_WIZARD_STYLE)
 from ui.styles.styles import DIALOG_LIGHT_STYLE, DIALOG_STYLE
 
+logger = logging.getLogger(__name__)
+
 
 class BackupWizardController:
     """Controller for managing the Backup and Restore wizard UI logic."""
@@ -24,7 +27,8 @@ class BackupWizardController:
     def __init__(self, main_window, db_manager):
         self.main_window = main_window
         self.db = db_manager
-        self.backup_manager = BackupManager(self.db)
+        self.config_manager = getattr(main_window, 'config_manager', None)
+        self.backup_manager = BackupManager(self.db, self.config_manager)
 
     def open_wizard(self):
         """Initializes and displays the Backup/Restore wizard dialog."""
@@ -417,7 +421,7 @@ class BackupWizardController:
                     ui_wizard.list_importApps.addItem(item)
 
             except Exception as e:
-                print(f"[DEBUG] Error reading file during browse: {e}")
+                logger.error(f"Error reading file during browse: {e}")
             finally:
                 ui_wizard.list_importApps.blockSignals(False)
                 update_import_summary()

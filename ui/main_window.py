@@ -8,6 +8,7 @@ from PyQt5.QtWidgets import (QAction, QMainWindow, QMenu, QMessageBox,
 from PyQt5.QtGui import QDesktopServices
 
 from core.services.activity_manager import ActivityManager
+from core.services.config_manager import ConfigManager
 from core.services.database import DatabaseManager
 from core.services.path_manager import PathManager
 from core.services.update_manager import UpdateManager
@@ -55,7 +56,7 @@ def apply_global_theme(theme_name):
 class AppMainWindow(QMainWindow):
     """Main portable application management app (formerly MyApp)."""
 
-    def __init__(self):
+    def __init__(self, config_manager=None):
         super().__init__()
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
@@ -64,7 +65,9 @@ class AppMainWindow(QMainWindow):
         self.db = DatabaseManager()
 
         # 2. Settings Loading
-        self.settings_controller = SettingsController(self)
+        self.config_manager = config_manager if config_manager is not None else ConfigManager()
+        self.settings_controller = SettingsController(
+            self, self.config_manager)
 
         # 3. Appearance & Theme
         icon_path = PathManager.get_asset_path("icons/FlowDeck.png")
@@ -83,7 +86,7 @@ class AppMainWindow(QMainWindow):
         localize_main_window(self)
 
         # 5. Create activity manager for Dashboard
-        self.activity_manager = ActivityManager()
+        self.activity_manager = ActivityManager(self.config_manager)
 
         # 6. Sidebar Logic (Navigation)
         self.setup_sidebar_logic()
@@ -293,7 +296,7 @@ class AppMainWindow(QMainWindow):
         # Set the HTML content for the About dialog with localized strings
         msg.setText(
             f"<h2>FlowDeck</h2>"
-            f"<p><b>{about_ver}:</b> 1.0.0 &nbsp;&nbsp;|&nbsp;&nbsp; <b>{about_license_lbl}:</b> <span style='color: #41CD52;'>{about_license_val}</span></p>"
+            f"<p><b>{about_ver}:</b> {VERSION} &nbsp;&nbsp;|&nbsp;&nbsp; <b>{about_license_lbl}:</b> <span style='color: #41CD52;'>{about_license_val}</span></p>"
             f"<p>{about_desc}</p>"
             f"<hr>"
             f"<p style='font-size: 11px; line-height: 1.5; color: #a0a0a0;'>"
@@ -395,13 +398,13 @@ class AppMainWindow(QMainWindow):
                 else:
                     minimize_to_tray = bool(raw_value)
             else:
-                print(
-                    "⚠️ [DEBUG] settings_controller not found. Using default (True).")
+                logger.warning(
+                    "settings_controller not found. Using default minimize_to_tray=True.")
         except Exception as e:
-            print(
-                f"⚠️ [DEBUG] Error reading minimize_to_tray: {e}")
+            logger.warning(
+                f"Error reading minimize_to_tray: {e}")
 
-        print(f"🛠️ [DEBUG] Final minimize_to_tray value: {minimize_to_tray}")
+        logger.debug(f"Final minimize_to_tray value: {minimize_to_tray}")
 
         # If enabled, hide window and ignore close event
         if minimize_to_tray and hasattr(self, 'tray_icon'):

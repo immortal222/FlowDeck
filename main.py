@@ -1,49 +1,56 @@
-import json
-import logging
-import os
 import sys
+import traceback
+import os
 
 from PyQt5.QtWidgets import QApplication
 
-from core.services.path_manager import PathManager
+from core.logging_config import setup_logging
+from core.services.config_manager import ConfigManager
 from core.services.single_instance import SingleInstance
 from locales.localization import _manager
 from ui.main_window import AppMainWindow
 
 
-def setup_logging():
-    logger = logging.getLogger()
-    logger.setLevel(logging.DEBUG)
-    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
-    return logger
+def _write_last_resort_trace(message):
+    try:
+        log_dir = os.path.join(os.path.dirname(
+            os.path.abspath(__file__)), 'logs')
+        os.makedirs(log_dir, exist_ok=True)
+        with open(os.path.join(log_dir, 'flowdeck_debug_trace.log'), 'a', encoding='utf-8') as handle:
+            handle.write(message + '\n')
+    except Exception:
+        pass
+
+
+def _install_exception_hook():
+    def _handle_exception(exc_type, exc_value, exc_traceback):
+        try:
+            if issubclass(exc_type, KeyboardInterrupt):
+                return
+            error_text = ''.join(traceback.format_exception(
+                exc_type, exc_value, exc_traceback))
+            _write_last_resort_trace(
+                f"[MAIN] Unhandled exception:\n{error_text}")
+            print(error_text, file=sys.stderr)
+        except Exception:
+            pass
+
+    sys.excepthook = _handle_exception
 
 
 if __name__ == "__main__":
+    _install_exception_hook()
     logger = setup_logging()
     logger.info("=== FlowDeck Start===")
 
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
 
-    # 1. Read config for language at startup
-    config_path = PathManager.get_config_path()
-    current_lang = "English"  # default if file doesn't exist
+    # 1. Load centralized application config
+    config_manager = ConfigManager()
+    _manager.set_language(config_manager.get("language", "English"))
 
-    if os.path.exists(config_path):
-        try:
-            with open(config_path, "r", encoding="utf-8") as f:
-                config_data = json.load(f)
-                current_lang = config_data.get("language", "English")
-        except Exception as e:
-            print(f"Error reading config in main: {e}")
-
-    # 2. Activate language in manager
-    _manager.set_language(current_lang)
-
-    # 3. --- SINGLE INSTANCE CHECK ---
+    # 2. --- SINGLE INSTANCE CHECK ---
     instance = SingleInstance()
     if instance.is_running:
         logger.info(
@@ -51,7 +58,7 @@ if __name__ == "__main__":
         sys.exit(0)
 
     # 4. --- GUI LOADING ---
-    window = AppMainWindow()
+    window = AppMainWindow(config_manager=config_manager)
     window.show()
 
     # 5. --- HANDLE APP "WAKE UP" ---

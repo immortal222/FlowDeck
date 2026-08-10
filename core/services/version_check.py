@@ -1,5 +1,8 @@
+import logging
 import requests
 from packaging.version import parse as parse_version
+
+logger = logging.getLogger(__name__)
 
 
 def check_github_updates(username="immortal222", repo="FlowDeck", current_version="0.1.0"):
@@ -38,19 +41,20 @@ def check_github_updates(username="immortal222", repo="FlowDeck", current_versio
                     # The link to the Release page
                     "html_url": data.get("html_url")
                 }
-                print(
+                logger.info(
                     f"Update available: {latest_version} (Current: {current_version})")
                 return True, update_info
             else:
                 return False, None
 
         elif response.status_code == 404:
-            print("The repository was not found or has no releases yet.")
+            logger.warning(
+                "The repository was not found or has no releases yet.")
             return False, None
         else:
-            print(f"Error with GitHub API: HTTP {response.status_code}")
+            logger.error(f"Error with GitHub API: HTTP {response.status_code}")
             return False, None
 
     except requests.exceptions.RequestException as e:
-        print(f"Network error: {e}")
+        logger.warning(f"Network error: {e}")
         return False, None

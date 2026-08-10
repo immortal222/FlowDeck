@@ -1,4 +1,13 @@
-import json
+from ui.styles.styles import DIALOG_LIGHT_STYLE, DIALOG_STYLE
+from ui.dialogs.dialog_utils import ask_confirmation
+from ui.pages.backup_wizard_controller import BackupWizardController
+from locales.ui_localizer import localize_settings_page
+from locales.localization import _
+from core.services.maintenance_manager import MaintenanceManager
+from core.services.portable_scanner import PortableScanner
+from core.services.folder_renamer import FolderRenamer
+from core.services.app_repository import AppRepository
+import logging
 import os
 import sys
 import winreg
@@ -11,13 +20,7 @@ from PyQt5.QtWidgets import (QApplication, QDialog, QFileDialog, QHBoxLayout,
                              QLabel, QLineEdit, QMessageBox, QPushButton,
                              QVBoxLayout)
 
-from core.services.maintenance_manager import MaintenanceManager
-from core.services.path_manager import PathManager
-from locales.localization import _
-from locales.ui_localizer import localize_settings_page
-from ui.pages.backup_wizard_controller import BackupWizardController
-from ui.dialogs.dialog_utils import ask_confirmation
-from ui.styles.styles import DIALOG_LIGHT_STYLE, DIALOG_STYLE
+logger = logging.getLogger(__name__)
 
 
 class ScanConfirmDialog(QDialog):
@@ -76,15 +79,13 @@ class ScanConfirmDialog(QDialog):
 class SettingsController:
     """Controller for managing application settings, themes, and maintenance tasks."""
 
-    def __init__(self, main_window):
+    def __init__(self, main_window, config_manager):
         self.main_window = main_window
         self.ui = main_window.ui
         self.db = main_window.db
+        self.config = config_manager
 
         localize_settings_page(self.main_window)
-
-        self.config_file = PathManager.get_config_path()
-        self.config = self.load_config()
 
         self.setup_ui()
         self.populate_ui()
@@ -93,46 +94,6 @@ class SettingsController:
         """Returns stylesheet based on active theme."""
         theme = self.config.get("theme", "Modern Dark")
         return DIALOG_LIGHT_STYLE if theme == "Modern Light" else DIALOG_STYLE
-
-    def load_config(self):
-        """Loads configuration from file or creates it with defaults if missing."""
-        default_apps_path = os.path.expanduser(
-            "~/FlowDeck/Apps").replace("\\", "/")
-
-        default_config = {
-            "install_path": default_apps_path,
-            "start_on_boot": False,
-            "minimize_to_tray": True,
-            "language": "English",
-            "theme": "Modern Dark",
-            "update_freq": "On Startup",
-            "silent_updater": True,
-            "update_to_start": True
-        }
-
-        if not os.path.exists(default_apps_path):
-            try:
-                os.makedirs(default_apps_path)
-                print(
-                    f"[DEBUG] Created default applications folder: {default_apps_path}")
-            except Exception as e:
-                print(f"Failed to create directory: {e}")
-
-        if not os.path.exists(self.config_file):
-            try:
-                with open(self.config_file, "w", encoding="utf-8") as f:
-                    json.dump(default_config, f, indent=4, ensure_ascii=False)
-            except Exception as e:
-                print(f"Error creating config file: {e}")
-            return default_config
-
-        try:
-            with open(self.config_file, "r", encoding="utf-8") as f:
-                user_config = json.load(f)
-                return {**default_config, **user_config}
-        except Exception as e:
-            print(f"Error reading config file: {e}")
-            return default_config
 
     def setup_ui(self):
         """Binds UI elements to controller methods."""
@@ -267,8 +228,7 @@ class SettingsController:
         self.config["update_freq"] = self.ui.combo_updateFrequency.currentData()
 
         try:
-            with open(self.config_file, "w", encoding="utf-8") as f:
-                json.dump(self.config, f, indent=4, ensure_ascii=False)
+            self.config.save()
 
             self.apply_start_on_boot(self.config.get("start_on_boot", False))
 
@@ -356,17 +316,17 @@ class SettingsController:
 
             if enable:
                 winreg.SetValueEx(key, app_name, 0, winreg.REG_SZ, app_path)
-                print("📌 FlowDeck added to startup.")
+                logger.info("FlowDeck added to startup.")
             else:
                 try:
                     winreg.DeleteValue(key, app_name)
-                    print("🧹 FlowDeck removed from startup.")
+                    logger.info("FlowDeck removed from startup.")
                 except FileNotFoundError:
                     pass
 
             winreg.CloseKey(key)
         except Exception as e:
-            print(
+            logger.error(
                 f"Error configuring startup registry key: {e}")
 
     def manual_update_check(self):
@@ -394,7 +354,13 @@ class SettingsController:
 
         QApplication.setOverrideCursor(Qt.WaitCursor)
 
-        manager = MaintenanceManager(self.db, self.config)
+        # create and inject helper services so UI can reuse them or test them separately
+        scanner = PortableScanner()
+        renamer = FolderRenamer()
+        repository = AppRepository(self.db)
+
+        manager = MaintenanceManager(
+            self.db, self.config, scanner=scanner, renamer=renamer, repository=repository)
 
         success, removed, added, error_msg = manager.execute_scan_and_repair(
             dialog_callback=handle_confirm_dialog)
@@ -431,7 +397,7 @@ class SettingsController:
         result_text = _("set_maintenance_details",
                         "🧹 Maintenance completed safely!\n\n"
                         "• Database backup: Created successfully.\n"
-                        "• Orphaned records removed: {removed}\n"
+                        "• Orphaned items removed: {removed}\n"
                         "• New portable applications detected: {added}").format(
                             removed=removed,
                             added=added
@@ -449,7 +415,7 @@ class SettingsController:
 
     def factory_reset(self):
         """Resets the application to factory defaults without requiring a restart."""
-        print("\n=== [DEBUG_RESET] Starting factory_reset execution ===")
+        logger.info("=== [DEBUG_RESET] Starting factory_reset execution ===")
 
         # 1. Ask for confirmation before performing factory reset
         title = _("set_factory_reset_title", "Factory Reset")
@@ -497,7 +463,7 @@ class SettingsController:
         # 3. Perform database ERASE using dynamic connection from DatabaseManager
         if self.db and hasattr(self.db, 'get_connection'):
             try:
-                print(
+                logger.debug(
                     "[DEBUG_RESET] Opening dynamic database connection for wiping...")
                 with self.db.get_connection() as conn:
                     cursor = conn.cursor()
@@ -506,10 +472,10 @@ class SettingsController:
                     for table in ["apps", "categories", "activity_log", "favorites"]:
                         try:
                             cursor.execute(f"DELETE FROM {table};")
-                            print(
+                            logger.debug(
                                 f"[DEBUG_RESET] Table {table} wiped successfully.")
                         except Exception as e_tbl:
-                            print(
+                            logger.warning(
                                 f"[DEBUG_RESET] Table {table} wipe skipped/failed: {e_tbl}")
 
                     # Reset internal autoincrement counter
@@ -524,49 +490,33 @@ class SettingsController:
                     # Run VACUUM to reclaim space and flush the file
                     try:
                         cursor.execute("VACUUM;")
-                        print("[DEBUG_RESET] Database VACUUM complete.")
+                        logger.debug("[DEBUG_RESET] Database VACUUM complete.")
                     except Exception as e_vac:
-                        print(f"[DEBUG_RESET] VACUUM skipped: {e_vac}")
+                        logger.warning(
+                            f"[DEBUG_RESET] VACUUM skipped: {e_vac}")
 
-                print("[DEBUG_RESET] Database clear block successfully finished.")
+                logger.debug(
+                    "[DEBUG_RESET] Database clear block successfully finished.")
             except Exception as e:
-                print(f"[DEBUG_RESET] ERROR during database wipe: {e}")
+                logger.error(f"[DEBUG_RESET] ERROR during database wipe: {e}")
 
         # 4. Perform settings rewrite with default parameters (No File Deletion)
-        config_path = self.config_file
-
-        # Define the exact factory default configuration dictionary
-        default_apps_path = os.path.expanduser(
-            "~/FlowDeck/Apps").replace("\\", "/")
-        default_config = {
-            "install_path": default_apps_path,
-            "start_on_boot": False,
-            "minimize_to_tray": True,
-            "language": "English",
-            "theme": "Modern Dark",
-            "update_freq": "On Startup",
-            "silent_updater": True
-        }
-
         try:
-            print(
-                f"[DEBUG_RESET] Rewriting config.json with factory defaults at: {config_path}")
-            with open(config_path, "w", encoding="utf-8") as f:
-                json.dump(default_config, f, indent=4, ensure_ascii=False)
-
-            # Update the runtime memory config immediately
-            self.config = default_config
-            print("[DEBUG_RESET] config.json successfully overwritten.")
+            logger.debug(
+                "[DEBUG_RESET] Resetting config.json to factory defaults.")
+            self.config.reset_defaults()
+            logger.debug(
+                "[DEBUG_RESET] config.json successfully reset to defaults.")
         except Exception as e_cfg:
-            print(f"[DEBUG_RESET] ERROR rewriting config file: {e_cfg}")
+            logger.error(f"[DEBUG_RESET] ERROR resetting config file: {e_cfg}")
 
         # 5. Perform activity log file deletion
         if hasattr(self.main_window, 'activity_manager'):
             self.main_window.activity_manager.clear_history()
-            print(
-                f"[DEBUG_RESET] Activity log file deleted successfully")
+            logger.info(
+                "[DEBUG_RESET] Activity log file deleted successfully")
         else:
-            print(
+            logger.warning(
                 "[DEBUG_RESET] Activity manager not found; skipping activity log deletion.")
 
         if hasattr(self.main_window, 'activity_manager'):
@@ -581,17 +531,18 @@ class SettingsController:
                 func(path)
             try:
                 shutil.rmtree(apps_root, onerror=remove_readonly)
-                print("[DEBUG_RESET] Apps folder tree deleted successfully.")
+                logger.info(
+                    "[DEBUG_RESET] Apps folder tree deleted successfully.")
 
                 # Re-create the empty apps folder just in case to keep paths clean
                 os.makedirs(apps_root, exist_ok=True)
             except Exception as e:
-                print(
+                logger.error(
                     f"[DEBUG_RESET] ERROR deleting apps root folder {apps_root}: {e}")
 
         # 7. Apply global theme reset and update all active UI modules immediately
         try:
-            print(
+            logger.debug(
                 "[DEBUG_RESET] Updating active UI controllers with default parameters...")
 
             # Apply default theme (Modern Dark) globally
@@ -614,9 +565,10 @@ class SettingsController:
             if hasattr(self.main_window, 'my_apps_controller'):
                 self.main_window.my_apps_controller.refresh_data()
 
-            print("[DEBUG_RESET] All active UI views refreshed successfully.")
+            logger.debug(
+                "[DEBUG_RESET] All active UI views refreshed successfully.")
         except Exception as e_ui:
-            print(f"[DEBUG_RESET] UI dynamic refresh warning: {e_ui}")
+            logger.warning(f"[DEBUG_RESET] UI dynamic refresh warning: {e_ui}")
 
         # 8. Show success message box
         success_title = _("set_factory_reset_success_title", "Reset Complete")
@@ -635,4 +587,5 @@ class SettingsController:
         if ok_btn:
             ok_btn.setObjectName("primaryButton")
         success_box.exec_()
-        print("=== [DEBUG_RESET] Factory Reset finished successfully! ===")
+        logger.info(
+            "=== [DEBUG_RESET] Factory Reset finished successfully! ===")

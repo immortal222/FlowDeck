@@ -1,9 +1,11 @@
+import logging
 import os
 import shutil
 import subprocess
+import traceback
 import webbrowser
 
-from PyQt5.QtCore import QFileInfo, Qt
+from PyQt5.QtCore import QFileInfo, QObject, Qt, QThread, pyqtSignal
 from PyQt5.QtGui import QCursor
 from PyQt5.QtWidgets import (QAction, QApplication, QDialog, QFileIconProvider,
                              QGridLayout, QMenu, QMessageBox)
@@ -14,10 +16,56 @@ from locales.ui_localizer import localize_myapps_page
 from ui.dialogs.dialog_utils import create_styled_msgbox, ask_confirmation
 from ui.widgets.app_library_card import AppLibraryCard
 
+logger = logging.getLogger(__name__)
+
+
+def _write_trace(message):
+    try:
+        log_dir = os.path.join(os.path.dirname(
+            os.path.dirname(os.path.dirname(__file__))), 'logs')
+        os.makedirs(log_dir, exist_ok=True)
+        with open(os.path.join(log_dir, 'flowdeck_debug_trace.log'), 'a', encoding='utf-8') as handle:
+            handle.write(message + '\n')
+    except Exception:
+        pass
+
+
 """
 This file manages the "My Apps" page, displaying the list of installed applications, 
 filtering, and providing management options.
 """
+
+
+class FolderSizeWorker(QObject):
+    """Calculates folder sizes in a worker thread to keep the UI responsive."""
+
+    sizes_ready = pyqtSignal(int, dict)
+
+    def __init__(self, request_id, folder_paths):
+        super().__init__()
+        self.request_id = request_id
+        self.folder_paths = folder_paths
+
+    def run(self):
+        try:
+            _write_trace(
+                f"[MY_APPS] worker start request={self.request_id} dirs={len(self.folder_paths)}")
+            results = {}
+            for folder_path in self.folder_paths:
+                normalized_path = os.path.normpath(folder_path)
+                results[normalized_path] = get_folder_size_gb(normalized_path)
+            _write_trace(
+                f"[MY_APPS] worker complete request={self.request_id}")
+            self.sizes_ready.emit(self.request_id, results)
+        except Exception as error:
+            logger.error(f"[MY_APPS] Folder size worker failed: {error}")
+            _write_trace(
+                f"[MY_APPS] worker exception request={self.request_id}: {error}\n{traceback.format_exc()}")
+            try:
+                self.sizes_ready.emit(self.request_id, {})
+            except Exception as emit_error:
+                _write_trace(
+                    f"[MY_APPS] worker emit failed request={self.request_id}: {emit_error}")
 
 
 class MyAppsController:
@@ -31,7 +79,13 @@ class MyAppsController:
 
         self.cached_apps = []
         self.icon_cache = {}
+        self.folder_size_cache = {}
         self.icon_provider = QFileIconProvider()
+        self._apps_snapshot = None
+        self._last_portable_root = None
+        self._size_workers = {}
+        self._size_request_id = 0
+        self._size_load_pending = False
 
         # 1. Toolbar component connections
         if hasattr(self.ui, 'myApps_searchBox'):
@@ -93,6 +147,119 @@ class MyAppsController:
                 return None
         return target_dir
 
+    def _build_apps_snapshot(self, apps):
+        snapshot = []
+        for app in apps:
+            if isinstance(app, dict):
+                snapshot.append((
+                    app.get('id'),
+                    app.get('name'),
+                    app.get('local_path'),
+                    app.get('exe_path'),
+                    app.get('current_version'),
+                    app.get('latest_version'),
+                    app.get('is_favorite', 0),
+                ))
+            else:
+                snapshot.append((
+                    app[0] if len(app) > 0 else None,
+                    app[1] if len(app) > 1 else None,
+                    app[2] if len(app) > 2 else None,
+                    app[3] if len(app) > 3 else None,
+                    app[6] if len(app) > 6 else None,
+                    app[7] if len(app) > 7 else None,
+                    app[8] if len(app) > 8 else 0,
+                ))
+        return tuple(snapshot)
+
+    def _get_cached_folder_size(self, folder_path):
+        if not folder_path:
+            return 0.0
+
+        normalized_path = os.path.normpath(folder_path)
+        return self.folder_size_cache.get(normalized_path, 0.0)
+
+    def _cleanup_size_worker(self, request_id):
+        worker_data = self._size_workers.pop(request_id, None)
+        if worker_data is None:
+            return
+
+        _, worker_thread = worker_data
+        if worker_thread is not None and worker_thread.isRunning():
+            try:
+                worker_thread.quit()
+                worker_thread.wait(500)
+            except:
+                pass
+
+    def _start_size_loader(self, active_dirs):
+        missing_dirs = [
+            path for path in sorted(active_dirs)
+            if path not in self.folder_size_cache
+        ]
+
+        self._size_load_pending = bool(missing_dirs)
+        _write_trace(
+            f"[MY_APPS] start_size_loader pending={bool(missing_dirs)} dirs={len(missing_dirs)}")
+        if not missing_dirs:
+            self.update_stats_label()
+            return
+
+        self._size_request_id += 1
+        request_id = self._size_request_id
+        worker_thread = QThread()
+        worker = FolderSizeWorker(request_id, missing_dirs)
+        worker.moveToThread(worker_thread)
+        worker.sizes_ready.connect(self._apply_loaded_folder_sizes)
+        worker_thread.started.connect(worker.run)
+        worker_thread.start()
+
+        self._size_workers[request_id] = (worker, worker_thread)
+
+    def _apply_loaded_folder_sizes(self, request_id, size_map):
+        try:
+            _write_trace(
+                f"[MY_APPS] apply_loaded_folder_sizes request={request_id}")
+            self._cleanup_size_worker(request_id)
+
+            if request_id != self._size_request_id:
+                return
+
+            self.folder_size_cache.update(size_map)
+            self._size_load_pending = False
+
+            for app in self.cached_apps:
+                folder_path = app.get("dir")
+                if not folder_path:
+                    app["size_gb"] = 0.0
+                    continue
+                app["size_gb"] = self.folder_size_cache.get(
+                    os.path.normpath(folder_path), 0.0)
+
+            self.update_stats_label()
+        except Exception as error:
+            _write_trace(
+                f"[MY_APPS] apply_loaded_folder_sizes exception: {error}\n{traceback.format_exc()}")
+            logger.error(
+                f"[MY_APPS] apply_loaded_folder_sizes failed: {error}")
+
+    def update_stats_label(self):
+        if not hasattr(self.ui, 'myApps_lblStats'):
+            return
+
+        total_gb = sum(a["size_gb"] for a in self.cached_apps)
+        updates_count = sum(1 for a in self.cached_apps if a["has_update"])
+        stats_text = (
+            f"{len(self.cached_apps)} " + _("apps_installed", "Applications Installed") +
+            f" | {total_gb:.2f} GB | {updates_count} " +
+            _("apps_updates_avail", "Updates Available")
+        )
+        if self._size_load_pending:
+            stats_text += " | " + _(
+                "apps_calculating_size", "Calculating size...")
+
+        self.ui.myApps_lblStats.setText(stats_text)
+
     def refresh_data(self):
         """Loads all application data from the database into memory."""
         try:
@@ -100,12 +267,27 @@ class MyAppsController:
         except AttributeError:
             return
 
-        self.cached_apps = []
-
         # Get current installation root from settings
         current_root = ""
         if self.portable_root:
             current_root = os.path.normpath(self.portable_root)
+
+        current_snapshot = self._build_apps_snapshot(apps)
+        if (
+            self.cached_apps
+            and self._apps_snapshot == current_snapshot
+            and self._last_portable_root == current_root
+        ):
+            self.render_apps()
+            self._start_size_loader({
+                os.path.normpath(app["dir"]) for app in self.cached_apps if app.get("dir")
+            })
+            return
+
+        self.cached_apps = []
+        self._apps_snapshot = current_snapshot
+        self._last_portable_root = current_root
+        active_dirs = set()
 
         for app in apps:
             if isinstance(app, dict):
@@ -155,24 +337,32 @@ class MyAppsController:
                 continue
 
             safe_dir = self.get_safe_target_dir(db_folder, db_exe)
-            size_gb = get_folder_size_gb(safe_dir)
+            if safe_dir:
+                active_dirs.add(os.path.normpath(safe_dir))
+            size_gb = self._get_cached_folder_size(safe_dir)
 
             # Check for version updates
             latest_ver = db_latest_ver  # Αν η βάση έχει NULL, αυτό θα γίνει None
             has_update = is_update_available(ver, latest_ver)
 
-            if db_exe and os.path.exists(db_exe) and db_exe not in self.icon_cache:
-                self.icon_cache[db_exe] = self.icon_provider.icon(
-                    QFileInfo(db_exe)).pixmap(48, 48)
+            if abs_exe_path not in self.icon_cache:
+                self.icon_cache[abs_exe_path] = self.icon_provider.icon(
+                    QFileInfo(abs_exe_path)).pixmap(48, 48)
 
             self.cached_apps.append({
-                "id": app_id, "name": name, "dir": safe_dir, "exe": db_exe,
+                "id": app_id, "name": name, "dir": safe_dir, "exe": abs_exe_path,
                 "ver": ver, "has_update": has_update, "latest_ver": latest_ver,
                 "size_gb": size_gb, "source": source, "update_url": update_url,
                 "homepage": homepage, "is_favorite": is_favorite
             })
 
+        self.folder_size_cache = {
+            path: size for path, size in self.folder_size_cache.items()
+            if path in active_dirs
+        }
+
         self.render_apps()
+        self._start_size_loader(active_dirs)
 
     def render_apps(self):
         if self.ui.myApps_scrollContent.layout() is None:
@@ -218,9 +408,6 @@ class MyAppsController:
         max_cols = 3
         grid.setSpacing(20 if self.view_mode == "grid" else 12)
 
-        total_gb = sum(a["size_gb"] for a in self.cached_apps)
-        updates_count = sum(1 for a in self.cached_apps if a["has_update"])
-
         for app in display_apps:
             card = AppLibraryCard(
                 app,
@@ -241,13 +428,7 @@ class MyAppsController:
                 grid.addWidget(card, row, 0, 1, 3)
                 row += 1
 
-        if hasattr(self.ui, 'myApps_lblStats'):
-            stats_text = (
-                f"{len(self.cached_apps)} " + _("apps_installed", "Applications Installed") +
-                f" | {total_gb:.2f} GB | {updates_count} " +
-                _("apps_updates_avail", "Updates Available")
-            )
-            self.ui.myApps_lblStats.setText(stats_text)
+        self.update_stats_label()
 
     def launch_app(self, exe_path, app_name="Unknown"):
         """Opens the application and logs the activity."""
@@ -270,7 +451,7 @@ class MyAppsController:
                 )
                 self.log_app_activity("act_launch_success", "launch", app_name)
             except Exception as e:
-                print(f"Error: {e}")
+                logger.error(f"Error launching app {app_name}: {e}")
                 self.log_app_activity("act_launch_failed", "error", app_name)
 
     def uninstall_app(self, app):
@@ -425,10 +606,10 @@ class MyAppsController:
                 log_key = "act_fav_added" if new_status == 1 else "act_fav_removed"
                 self.log_app_activity(log_key, "launch", app_name)
             else:
-                print(
-                    "[ERROR] Η μέθοδος 'toggle_favorite' δεν βρέθηκε στο αντικείμενο database.")
+                logger.error(
+                    "Method 'toggle_favorite' was not found on the database object.")
         except Exception as e:
-            print(f"[ERROR] Αποτυχία αλλαγής Favorite κατάστασης: {e}")
+            logger.error(f"Failed to toggle favorite status: {e}")
 
     def log_app_activity(self, log_key, event_type, app_name):
         """Helper function for centralized activity logging."""
