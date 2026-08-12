@@ -5,6 +5,7 @@ __pycache__/
 
 # --- Local Databases & User Settings ---
 linkweave.db
+flowdeck.db
 config.json
 activity_log.json
 app_settings.json
@@ -26,3 +27,6 @@ backups/
 # --- Miscellaneous ---
 Release Notes.md
 file_version_info.txt
+logs/flowdeck_debug_trace.log
+logs/flowdeck_errors.log
+

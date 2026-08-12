@@ -126,11 +126,9 @@ def get_portable_apps_metadata(app_folder):
             if name:
                 name = name.replace(", Portable Edition",
                                     "").replace(" Portable", "")
-                print(f"Found name in appinfo.ini: {name}")
 
         if config.has_section('Version'):
             version = config.get('Version', 'displayversion', fallback=None)
-            print(f"Found version in appinfo.ini: {version}")
 
         if config.has_section('Control'):
             start_exe = config.get('Control', 'start', fallback=None)
