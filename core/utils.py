@@ -126,9 +126,11 @@ def get_portable_apps_metadata(app_folder):
             if name:
                 name = name.replace(", Portable Edition",
                                     "").replace(" Portable", "")
+                print(f"Found name in appinfo.ini: {name}")
 
         if config.has_section('Version'):
             version = config.get('Version', 'displayversion', fallback=None)
+            print(f"Found version in appinfo.ini: {version}")
 
         if config.has_section('Control'):
             start_exe = config.get('Control', 'start', fallback=None)
@@ -148,6 +150,88 @@ def get_portable_apps_metadata(app_folder):
         logger.error(f"Error reading {ini_path}: {e}")
 
     return None
+
+
+def scan_ini_files(root_folder):
+    """
+    Scans a PortableApps root for appinfo.ini files and returns a list of found metadata.
+    """
+    if not root_folder or not os.path.isdir(root_folder):
+        return []
+
+    try:
+        ini_files = []
+        for dirpath, _, filenames in os.walk(root_folder):
+            if "appinfo.ini" in filenames:
+                ini_files.append(os.path.join(dirpath, "appinfo.ini"))
+        return ini_files
+    except Exception as e:
+        logger.error(f"Error scanning ini files in {root_folder}: {e}")
+        return []
+
+
+def update_all_ini_files(root_folder, db):
+    """
+    Updates the database using the metadata 
+    found in all appinfo.ini files.
+    Returns a list of updated app records.
+    """
+
+    ini_files = []
+    ini_files = scan_ini_files(root_folder)
+
+    updated_apps = []
+    for ini_path in sorted(ini_files):
+        app_folder = os.path.dirname(
+            os.path.dirname(os.path.dirname(ini_path)))
+        metadata = get_portable_apps_metadata(app_folder)
+        if not metadata:
+            continue
+
+        app_name = metadata.get("name")
+        if not app_name:
+            continue
+
+        version = metadata.get("version") or "1.0"
+        start_exe = metadata.get("start_exe")
+        exe_path = None
+
+        if start_exe:
+            relative_exe_path = os.path.join(app_folder, start_exe)
+            exe_path = os.path.abspath(relative_exe_path)
+        else:
+            for candidate in [os.path.join(app_folder, "App"), app_folder]:
+                if os.path.isdir(candidate):
+                    for root, _, files in os.walk(candidate):
+                        for filename in files:
+                            if filename.lower().endswith(".exe"):
+                                exe_path = os.path.abspath(
+                                    os.path.join(root, filename))
+                                break
+                        if exe_path:
+                            break
+                if exe_path:
+                    break
+
+        if not exe_path:
+            exe_path = os.path.abspath(app_folder)
+
+        if db and hasattr(db, "add_or_update_app"):
+            db.add_or_update_app(
+                name=app_name,
+                local_path=app_folder,
+                exe_path=exe_path,
+                current_version=version,
+            )
+
+        updated_apps.append({
+            "name": app_name,
+            "folder": app_folder,
+            "version": version,
+            "start_exe": start_exe,
+            "exe_path": exe_path,
+        })
+    return updated_apps
 
 
 def get_clean_app_name(name):

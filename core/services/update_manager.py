@@ -8,6 +8,7 @@ from PyQt5.QtWidgets import QMessageBox
 from core.services.update_worker import UpdateCheckWorker
 from locales.localization import _
 from ui.dialogs.dialog_utils import create_styled_msgbox
+from core.utils import update_all_ini_files
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,12 @@ class UpdateManager(QObject):
         self.last_check_time = None
         self.status = "idle"
         self.last_check_summary = ""
+
+    @property
+    def portable_root(self):
+        if hasattr(self.main_window, "settings_controller"):
+            return self.main_window.settings_controller.config.get("install_path")
+        return None
 
     def automatic_check_on_startup(self, config, settings_controller):
         """Executes automatic checks based on configured frequency."""
@@ -91,6 +98,8 @@ class UpdateManager(QObject):
         self.status = "checking"
         self.last_check_time = datetime.now()
         self.last_check_summary = ""
+
+        update_all_ini_files(self.portable_root, self.db)
 
         apps_list = self._get_installed_apps()
         self._log_update_check()

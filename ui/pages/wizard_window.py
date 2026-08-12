@@ -1,7 +1,8 @@
 from ui.styles.styles import DIALOG_STYLE, DIALOG_LIGHT_STYLE
 from locales.ui_localizer import localize_wizard_page
 from locales.localization import _
-from core.utils import get_portable_apps_metadata, is_internet_available, get_pe_version, get_pe_name
+from core.utils import (get_portable_apps_metadata, is_internet_available,
+                        get_pe_version, get_pe_name, scan_ini_files)
 from core.services.path_manager import PathManager
 from core.services.installer import AppInstaller
 from core.api.scoop_api import ScoopAPI
@@ -529,12 +530,19 @@ class WizardController(QObject):
             os.remove(temp_paf_path)
 
         self.log("✅ Installation finished. Reading metadata...")
-        folders = [os.path.join(self.portable_root, d) for d in os.listdir(self.portable_root)
-                   if os.path.isdir(os.path.join(self.portable_root, d))]
-        if not folders:
+
+        ini_files = []
+        ini_files = scan_ini_files(self.portable_root)
+
+        if not ini_files:
+            self.log("⚠️ No PortableApps metadata found in appinfo.ini files.")
             return
 
-        latest_folder = max(folders, key=os.path.getmtime)
+        latest_ini = max(ini_files, key=os.path.getmtime)
+        latest_folder = os.path.dirname(
+            os.path.dirname(os.path.dirname(latest_ini)))
+        # latest_ini = ini_files[0]
+        # latest_folder = os.path.dirname(os.path.dirname(os.path.dirname(latest_ini)))
         metadata = get_portable_apps_metadata(latest_folder)
 
         if metadata:
