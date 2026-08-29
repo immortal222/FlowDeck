@@ -1,13 +1,15 @@
-from ast import Import
+# Standard Library Imports
 import configparser
+import logging
 import os
 import re
 import shutil
 import socket
 
-import logging
+# Third-Party Library Imports
 import pefile
 
+# Local Module Imports
 from core.services.path_manager import PathManager
 
 logger = logging.getLogger(__name__)
@@ -224,10 +226,10 @@ def update_all_ini_files(root_folder, db):
 
         updated_apps.append({
             "name": app_name,
-            "folder": app_folder,
+            "folder": PathManager.to_absolute_path(app_folder),
             "version": version,
             "start_exe": start_exe,
-            "exe_path": exe_path,
+            "exe_path": PathManager.to_absolute_path(exe_path),
         })
     return updated_apps
 
@@ -273,8 +275,10 @@ def get_safe_folder_path(base_dir, desired_name, current_path=None):
     Generates a system-safe directory path based on application name.
     Handles naming conflicts by appending numeric suffixes.
     """
+    abs_base_dir = PathManager.to_absolute_path(base_dir)
     safe_folder_name = re.sub(r'[\\/*?:"<>|]', "", desired_name).strip()
-    new_dir_path = os.path.join(base_dir, safe_folder_name).replace("\\", "/")
+    new_dir_path = os.path.join(
+        abs_base_dir, safe_folder_name).replace("\\", "/")
 
     counter = 2
     base_new_dir_path = new_dir_path

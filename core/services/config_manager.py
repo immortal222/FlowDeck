@@ -9,9 +9,9 @@ logger = logging.getLogger(__name__)
 
 class ConfigManager:
     DEFAULT_CONFIG = {
-        "install_path": os.path.expanduser("~/FlowDeck/Apps").replace("\\", "/"),
+        "install_path": "Apps",
         "start_on_boot": False,
-        "minimize_to_tray": True,
+        "minimize_to_tray": False,
         "language": "English",
         "theme": "Modern Dark",
         "update_freq": "On Startup",
@@ -59,7 +59,7 @@ class ConfigManager:
         self._ensure_install_path()
 
     def _ensure_install_path(self):
-        install_path = self.data.get("install_path")
+        install_path = self.get("install_path")
         if install_path:
             try:
                 os.makedirs(install_path, exist_ok=True)
@@ -67,18 +67,40 @@ class ConfigManager:
                 logger.error(f"Failed to create install path: {e}")
 
     def get(self, key, default=None):
+        """Retrieves a configuration value, dynamically resolving path keys if needed."""
         if key in self.data:
-            return self.data[key]
-        return default if default is not None else self.DEFAULT_CONFIG.get(key)
+            value = self.data[key]
+        else:
+            value = default if default is not None else self.DEFAULT_CONFIG.get(
+                key)
 
-    def set(self, key, value):
-        self.data[key] = value
+        if key == "install_path":
+            return PathManager.resolve_install_path(value)
+
+        return value
 
     def __getitem__(self, key):
-        return self.data[key]
+        return self.get(key)
+
+    def set(self, key, value):
+        """Sets a configuration value, making install_path relative if inside root directory."""
+        if key == "install_path" and value:
+            root_dir = PathManager.get_root_dir()
+            # Normalize paths for comparison
+            norm_value = os.path.normpath(value)
+            norm_root = os.path.normpath(root_dir)
+
+            # Check if selected path is inside application root (USB)
+            if norm_value.startswith(norm_root):
+                rel_path = os.path.relpath(norm_value, norm_root)
+                self.data[key] = rel_path.replace("\\", "/")
+            else:
+                self.data[key] = value.replace("\\", "/")
+        else:
+            self.data[key] = value
 
     def __setitem__(self, key, value):
-        self.data[key] = value
+        self.set(key, value)
 
     def __contains__(self, key):
         return key in self.data

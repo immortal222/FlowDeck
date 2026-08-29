@@ -1,3 +1,4 @@
+# Standard Library Imports
 import json
 import logging
 import os
@@ -6,9 +7,11 @@ import subprocess
 import sys
 import tempfile
 
+# Third-Party Library Imports
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QDialog, QMessageBox, QFileDialog, QListWidgetItem
+from PyQt5.QtWidgets import QDialog, QFileDialog, QListWidgetItem, QMessageBox
 
+# Local Module Imports
 from core.services.backup_manager import BackupManager
 from core.services.path_manager import PathManager
 from locales.localization import _
@@ -359,6 +362,8 @@ class BackupWizardController:
                         manifest_data = json.load(f)
 
                 dest_path = ui_wizard.txt_importDestinationPath.text().strip()
+                abs_dest_path = PathManager.to_absolute_path(
+                    dest_path) if dest_path else ""
 
                 def compare_versions(v1, v2):
                     try:
@@ -391,7 +396,7 @@ class BackupWizardController:
                     db_app = self.main_window.db.get_app_by_name(app_name)
                     exists_in_db = db_app is not None
                     target_folder = os.path.join(
-                        dest_path, folder_name) if dest_path and folder_name else ""
+                        abs_dest_path, folder_name) if abs_dest_path and folder_name else ""
                     exists_on_disk = os.path.exists(
                         target_folder) if target_folder else False
 
@@ -449,11 +454,13 @@ class BackupWizardController:
 
         def handle_start_import():
             source_path = ui_wizard.txt_importSourcePath.text().strip()
-            dest_path = ui_wizard.txt_importDestinationPath.text().strip()
+            raw_dest_path = ui_wizard.txt_importDestinationPath.text().strip()
 
-            if not dest_path:
-                dest_path = os.path.expanduser(
+            if not raw_dest_path:
+                raw_dest_path = os.path.expanduser(
                     "~/FlowDeck/Apps").replace("\\", "/")
+
+            dest_path = PathManager.to_absolute_path(raw_dest_path)
 
             if not source_path:
                 msg = QMessageBox(wizard_dialog)

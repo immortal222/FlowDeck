@@ -1,11 +1,20 @@
+# Standard Library Imports
+import os
 import sys
 import traceback
-import os
 
+# Third-Party Library Imports
 from PyQt5.QtWidgets import QApplication
 
+try:
+    import pyi_splash
+except ImportError:
+    pyi_splash = None
+
+# Local Module Imports
 from core.logging_config import setup_logging
 from core.services.config_manager import ConfigManager
+from core.services.path_manager import PathManager
 from core.services.single_instance import SingleInstance
 from locales.localization import _manager
 from ui.main_window import AppMainWindow
@@ -13,10 +22,10 @@ from ui.main_window import AppMainWindow
 
 def _write_last_resort_trace(message):
     try:
-        log_dir = os.path.join(os.path.dirname(
-            os.path.abspath(__file__)), 'logs')
+        log_dir = PathManager.to_absolute_path('logs')
         os.makedirs(log_dir, exist_ok=True)
-        with open(os.path.join(log_dir, 'flowdeck_debug_trace.log'), 'a', encoding='utf-8') as handle:
+        log_file = os.path.join(log_dir, 'flowdeck_debug_trace.log')
+        with open(log_file, 'a', encoding='utf-8') as handle:
             handle.write(message + '\n')
     except Exception:
         pass

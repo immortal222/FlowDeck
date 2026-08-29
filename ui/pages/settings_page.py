@@ -1,24 +1,30 @@
-from ui.styles.styles import DIALOG_LIGHT_STYLE, DIALOG_STYLE
-from ui.dialogs.dialog_utils import ask_confirmation
-from ui.pages.backup_wizard_controller import BackupWizardController
-from locales.ui_localizer import localize_settings_page
-from locales.localization import _
-from core.services.maintenance_manager import MaintenanceManager
-from core.services.portable_scanner import PortableScanner
-from core.services.folder_renamer import FolderRenamer
-from core.services.app_repository import AppRepository
+# Standard Library Imports
 import logging
 import os
-import sys
-import winreg
 import shutil
 import stat
 import subprocess
+import sys
+import winreg
 
+# Third-Party Imports
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (QApplication, QDialog, QFileDialog, QHBoxLayout,
                              QLabel, QLineEdit, QMessageBox, QPushButton,
                              QVBoxLayout)
+
+# Local Module Imports
+from core.services.app_repository import AppRepository
+from core.services.folder_renamer import FolderRenamer
+from core.services.maintenance_manager import MaintenanceManager
+from core.services.portable_scanner import PortableScanner
+from core.services.path_manager import PathManager
+from locales.localization import _
+from locales.ui_localizer import localize_settings_page
+from ui.dialogs.dialog_utils import ask_confirmation
+from ui.pages.backup_wizard_controller import BackupWizardController
+from ui.styles.styles import DIALOG_LIGHT_STYLE, DIALOG_STYLE
+
 
 logger = logging.getLogger(__name__)
 
@@ -143,10 +149,22 @@ class SettingsController:
                 self.manual_update_check)
 
     def populate_ui(self):
-        """Populates UI components with current configuration."""
+        """Populates UI components with current configuration and locks path controls if running from USB."""
+        # Dynamic check for USB mode
+        is_usb = PathManager.is_usb_drive()
+
         if hasattr(self.ui, 'txt_installPath'):
             self.ui.txt_installPath.setText(
                 self.config.get("install_path", ""))
+            self.ui.txt_installPath.setEnabled(not is_usb)
+            if is_usb:
+                self.ui.txt_installPath.setToolTip(
+                    _("set_path_disabled_usb", "Path selection is disabled in Portable (USB) mode."))
+            else:
+                self.ui.txt_installPath.setToolTip("")
+
+        if hasattr(self.ui, 'btn_browsePath'):
+            self.ui.btn_browsePath.setEnabled(not is_usb)
 
         if hasattr(self.ui, 'chk_startOnBoot'):
             self.ui.chk_startOnBoot.setChecked(
@@ -181,16 +199,35 @@ class SettingsController:
                 self.ui.combo_updateFrequency.setCurrentIndex(freq_index)
 
     def browse_install_path(self):
-        """Opens a directory selection dialog."""
+        """Opens a directory selection dialog and checks if selected path is on a removable drive."""
         folder = QFileDialog.getExistingDirectory(
-            self.main_window, "Select Installation Directory")
+            self.main_window, _("set_browse_title", "Select Installation Directory"))
+
         if folder:
-            self.ui.txt_installPath.setText(folder)
+            # Normalize path slashes for consistent UI display
+            clean_folder = os.path.normpath(folder).replace("\\", "/")
+
+            # Check if selected directory is on a removable drive
+            is_removable = PathManager.check_removable_drive(clean_folder)
+
+            if is_removable:
+                msg = QMessageBox(self.main_window)
+                msg.setIcon(QMessageBox.Warning)
+                msg.setWindowTitle(_("set_msg_title_warning", "Warning"))
+                msg.setText(_(
+                    "set_path_removable_drive",
+                    "Removable drives cannot be used for the installation folder. Please select a folder on a local drive."
+                ))
+                msg.setStyleSheet(self.get_msg_style())
+                msg.exec_()
+                return
+
+            self.ui.txt_installPath.setText(clean_folder)
 
     def open_install_path(self):
         """Opens the installation folder in Windows File Explorer."""
-        folder_path = self.ui.txt_installPath.text().strip()
-        folder_path = os.path.normpath(folder_path)
+        raw_folder_path = self.ui.txt_installPath.text().strip()
+        folder_path = PathManager.to_absolute_path(raw_folder_path)
 
         if os.path.exists(folder_path):
             try:
@@ -216,7 +253,8 @@ class SettingsController:
 
     def save_settings(self):
         """Synchronizes UI state to configuration file and applies changes globally."""
-        self.config["install_path"] = self.ui.txt_installPath.text()
+        new_path = self.ui.txt_installPath.text().strip()
+        self.config["install_path"] = new_path
         self.config["start_on_boot"] = self.ui.chk_startOnBoot.isChecked()
         self.config["minimize_to_tray"] = self.ui.chk_minimizeToTray.isChecked()
         self.config["update_to_start"] = self.ui.chk_updateToStart.isChecked()
@@ -229,6 +267,9 @@ class SettingsController:
 
         try:
             self.config.save()
+
+            # Refresh UI controls to reflect saved state
+            self.populate_ui()
 
             self.apply_start_on_boot(self.config.get("start_on_boot", False))
 

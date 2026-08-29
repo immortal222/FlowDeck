@@ -1,10 +1,13 @@
+# Standard Library Imports
 import logging
 import os
 from pathlib import Path
 
+# Local Module Imports
 from core.api.scoop_api import ScoopAPI
 from core.services.app_repository import AppRepository
 from core.services.folder_renamer import FolderRenamer
+from core.services.path_manager import PathManager
 from core.services.portable_scanner import PortableScanner
 from core.services.shortcut_manager import ShortcutManager
 
@@ -131,7 +134,11 @@ class MaintenanceManager:
             exe_path = app.get("exe_path")
             if not app_name or not exe_path:
                 continue
-            if not os.path.exists(exe_path):
+
+            # Ensure path is absolute before checking existence on disk
+            abs_exe_path = PathManager.to_absolute_path(exe_path)
+            if not os.path.exists(abs_exe_path):
                 continue
+
             self.shortcut_manager.ensure_shortcut(
-                app_name, exe_path, install_path)
+                app_name, abs_exe_path, install_path)

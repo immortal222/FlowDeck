@@ -1,5 +1,6 @@
 import os
 import sys
+import ctypes
 
 
 class PathManager:
@@ -14,6 +15,11 @@ class PathManager:
         else:
             # Running as a standard Python script
             return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+
+    @staticmethod
+    def get_default_install_path():
+        """Returns the default install directory for portable apps based on the app root."""
+        return os.path.join(PathManager.get_root_dir(), "Apps").replace("\\", "/")
 
     @staticmethod
     def get_resource_path(relative_path):
@@ -43,13 +49,11 @@ class PathManager:
     @staticmethod
     def get_config_path():
         """Returns the path for the configuration file."""
-        # Config file resides next to the executable to maintain portability
         return os.path.join(PathManager.get_root_dir(), "config.json").replace("\\", "/")
 
     @staticmethod
     def get_database_path(db_name="linkweave.db"):
         """Returns the path for the SQLite database file."""
-        # Database resides next to the executable
         return os.path.join(PathManager.get_root_dir(), db_name).replace("\\", "/")
 
     @staticmethod
@@ -61,3 +65,59 @@ class PathManager:
     def get_tips_path():
         """Returns the path for the tips.json resource file."""
         return PathManager.get_resource_path("tips.json")
+
+    @staticmethod
+    def is_usb_drive(path=None):
+        """Returns True if the application (or given path) is running from a removable USB drive."""
+        if path is None:
+            path = PathManager.get_root_dir()
+        return PathManager.check_removable_drive(path)
+
+    @staticmethod
+    def check_removable_drive(path):
+        """Checks if the given path is on a removable drive."""
+        if os.name == 'nt':
+            # Windows-specific check
+            drive_letter = os.path.splitdrive(path)[0]
+            if drive_letter:
+                drive_type = ctypes.windll.kernel32.GetDriveTypeW(drive_letter)
+                return drive_type == 2  # DRIVE_REMOVABLE
+        else:
+            return False
+
+    @staticmethod
+    def resolve_install_path(stored_path):
+        """Resolves the absolute install path dynamically in memory."""
+        if not stored_path:
+            return PathManager.get_default_install_path()
+
+        if os.path.isabs(stored_path):
+            return stored_path.replace("\\", "/")
+
+        # Handle relative path (USB / Portable mode)
+        full_path = os.path.join(PathManager.get_root_dir(), stored_path)
+        return os.path.normpath(full_path).replace("\\", "/")
+
+    @staticmethod
+    def to_relative_path(path):
+        """Converts an absolute path to a relative path based on the app root."""
+        if not path:
+            return ""
+        root_dir = PathManager.get_root_dir()
+        norm_path = os.path.normpath(path)
+        norm_root = os.path.normpath(root_dir)
+
+        if norm_path.startswith(norm_root):
+            rel_path = os.path.relpath(norm_path, norm_root)
+            return rel_path.replace("\\", "/")
+        return path.replace("\\", "/")
+
+    @staticmethod
+    def to_absolute_path(path):
+        """Converts a relative path to an absolute path based on the app root."""
+        if not path:
+            return ""
+        if not os.path.isabs(path):
+            abs_path = os.path.join(PathManager.get_root_dir(), path)
+            return os.path.normpath(abs_path).replace("\\", "/")
+        return os.path.normpath(path).replace("\\", "/")

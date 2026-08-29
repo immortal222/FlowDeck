@@ -1,6 +1,10 @@
+# Standard Library Imports
 import logging
 import re
 from pathlib import Path
+
+# Local Module Imports
+from core.services.path_manager import PathManager
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +33,10 @@ class ShortcutManager:
         if not portable_root or not target_path:
             return False
 
-        target = Path(target_path)
+        # Ensure target_path is resolved to an absolute path in memory
+        abs_target_path = PathManager.to_absolute_path(target_path)
+
+        target = Path(abs_target_path)
         if not target.exists():
             logger.warning(
                 f"Shortcut target does not exist, skipping creation: {target}")

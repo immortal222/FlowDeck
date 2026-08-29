@@ -10,6 +10,9 @@ from PyQt5.QtGui import QCursor
 from PyQt5.QtWidgets import (QAction, QApplication, QDialog, QFileIconProvider,
                              QGridLayout, QMenu, QMessageBox)
 
+
+# Local Module Imports
+from core.services.path_manager import PathManager
 from core.utils import get_folder_size_gb, is_update_available
 from locales.localization import _
 from locales.ui_localizer import localize_myapps_page
@@ -133,18 +136,21 @@ class MyAppsController:
     def get_safe_target_dir(self, db_folder_path, db_exe_path):
         target_dir = db_folder_path
         if not target_dir:
-            if db_exe_path and os.path.exists(db_exe_path):
-                target_dir = os.path.dirname(db_exe_path)
+            if db_exe_path and os.path.exists(PathManager.to_absolute_path(db_exe_path)):
+                target_dir = os.path.dirname(
+                    PathManager.to_absolute_path(db_exe_path))
             else:
                 return None
-        if not os.path.isabs(target_dir) and hasattr(self.main_window, 'portable_root'):
-            target_dir = os.path.join(
-                self.main_window.portable_root, target_dir)
-        target_dir = os.path.normpath(target_dir)
-        if hasattr(self.main_window, 'portable_root'):
-            root_norm = os.path.normpath(self.main_window.portable_root)
+
+        # Resolve to an absolute path in memory
+        target_dir = PathManager.to_absolute_path(target_dir)
+
+        if hasattr(self.main_window, 'portable_root') and self.main_window.portable_root:
+            root_norm = PathManager.to_absolute_path(
+                self.main_window.portable_root)
             if target_dir == root_norm:
                 return None
+
         return target_dir
 
     def _build_apps_snapshot(self, apps):

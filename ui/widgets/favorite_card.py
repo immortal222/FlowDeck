@@ -1,9 +1,13 @@
+# Standard Library Imports
 import os
 
-from PyQt5.QtCore import Qt, QFileInfo
+# Third-Party Library Imports
+from PyQt5.QtCore import QFileInfo, Qt
 from PyQt5.QtGui import QCursor
-from PyQt5.QtWidgets import QFrame, QVBoxLayout, QLabel, QPushButton
+from PyQt5.QtWidgets import QFrame, QLabel, QPushButton, QVBoxLayout
 
+# Local Module Imports
+from core.services.path_manager import PathManager
 from core.utils import is_update_available
 from locales.localization import _
 
@@ -23,10 +27,8 @@ class FavoriteCard(QFrame):
         lat = app_data.get('latest_version', ver)
 
         # Path setup
-        self.safe_dir = db_folder
-        if not os.path.isabs(db_folder) and portable_root:
-            self.safe_dir = os.path.normpath(
-                os.path.join(portable_root, db_folder))
+        self.safe_dir = PathManager.to_absolute_path(
+            db_folder) if db_folder else ""
 
         # UI Setup
         self.setObjectName("appCard")
@@ -39,8 +41,10 @@ class FavoriteCard(QFrame):
         self.icon_lbl = QLabel()
         self.icon_lbl.setFixedSize(30, 30)
         self.icon_lbl.setScaledContents(True)
-        if db_exe and os.path.exists(db_exe):
-            pixmap = icon_provider.icon(QFileInfo(db_exe)).pixmap(30, 30)
+
+        abs_db_exe = PathManager.to_absolute_path(db_exe) if db_exe else ""
+        if abs_db_exe and os.path.exists(abs_db_exe):
+            pixmap = icon_provider.icon(QFileInfo(abs_db_exe)).pixmap(30, 30)
             self.icon_lbl.setPixmap(pixmap)
         layout.addWidget(self.icon_lbl, alignment=Qt.AlignCenter)
 

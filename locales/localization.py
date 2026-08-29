@@ -217,6 +217,9 @@ TRANSLATIONS = {
         "set_msg_success_text": "Οι ρυθμίσεις αποθηκεύτηκαν επιτυχώς!",
         "set_msg_title_error": "Σφάλμα",
         "set_msg_error_text": "Αποτυχία αποθήκευσης ρυθμίσεων:\n{error}",
+        "set_msg_title_warning": "Προειδοποίηση",
+        "set_path_disabled_usb": "Η επιλογή φακέλου είναι απενεργοποιημένη επειδή το FlowDeck εκτελείται από φορητή μονάδα USB.",
+        "set_path_removable_drive": "Δεν μπορούν να χρησιμοποιηθούν αφαιρούμενες μονάδες για τον φάκελο εγκατάστασης. Παρακαλώ επιλέξτε έναν φάκελο σε τοπική μονάδα.",
 
         # System Tab
         "set_ui_group_install_path": "ΦΑΚΕΛΟΣ ΕΓΚΑΤΑΣΤΑΣΗΣ",
@@ -632,6 +635,9 @@ TRANSLATIONS = {
         "set_msg_success_text": "Settings saved successfully!",
         "set_msg_title_error": "Error",
         "set_msg_error_text": "Failed to save settings:\n{error}",
+        "set_msg_title_warning": "Warning",
+        "set_path_disabled_usb": "Folder selection is disabled because FlowDeck is running from a removable USB drive.",
+        "set_path_removable_drive": "Removable drives cannot be used for the installation folder. Please select a folder on a local drive.",
 
         # System Tab
         "set_ui_group_install_path": "INSTALLATION FOLDER",

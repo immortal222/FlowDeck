@@ -167,8 +167,15 @@ class AppMainWindow(QMainWindow):
         # Dashboard Icons
         self.ui.lblDash_TipIcon.setPixmap(QtGui.QPixmap(
             PathManager.get_asset_path("icons/lamp.png")))
-        self.ui.usbIcon.setPixmap(QtGui.QPixmap(
-            PathManager.get_asset_path("icons/disk.png")))
+        # Dynamic USB Mode Check
+        if PathManager.is_usb_drive():
+            self.ui.usbIcon.setPixmap(QtGui.QPixmap(
+                PathManager.get_asset_path("icons/usb.png")))
+            self.ui.usbIcon.setToolTip("Running in Portable Mode (USB)")
+        else:
+            self.ui.usbIcon.setPixmap(QtGui.QPixmap(
+                PathManager.get_asset_path("icons/disk.png")))
+            self.ui.usbIcon.setToolTip("Running in Local PC Mode")
 
         # Logo Icons
         self.ui.iconDash_Logo.setPixmap(QtGui.QPixmap(
