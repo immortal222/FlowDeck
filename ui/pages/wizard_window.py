@@ -508,6 +508,20 @@ class WizardController(QObject):
         filename = os.path.basename(file_path)
         self.log("📦 PortableApps (.paf) file detected.")
 
+        # 1. Snapshot existing app paths from the database before running the installer
+        known_db_paths = set()
+        if hasattr(self.db, 'get_all_apps'):
+            try:
+                for app in self.db.get_all_apps():
+                    db_folder = app.get('local_path') if isinstance(
+                        app, dict) else (app[2] if len(app) > 2 else '')
+                    if db_folder:
+                        abs_db_folder = os.path.normpath(
+                            PathManager.to_absolute_path(db_folder))
+                        known_db_paths.add(abs_db_folder)
+            except Exception as e:
+                logger.error(f"Error fetching known app paths from DB: {e}")
+
         # Copy to staging area
         temp_paf_path = os.path.join(self.portable_root, filename)
         if os.path.abspath(file_path) != os.path.abspath(temp_paf_path):
@@ -531,19 +545,38 @@ class WizardController(QObject):
 
         self.log("✅ Installation finished. Reading metadata...")
 
-        ini_files = []
-        ini_files = scan_ini_files(self.portable_root)
+        # 2. Identify the target folder (newly created or updated)
+        current_subfolders = []
+        if os.path.exists(self.portable_root):
+            for entry in os.listdir(self.portable_root):
+                full_p = os.path.normpath(
+                    os.path.join(self.portable_root, entry))
+                if os.path.isdir(full_p) and not entry.startswith("__"):
+                    current_subfolders.append(full_p)
 
-        if not ini_files:
-            self.log("⚠️ No PortableApps metadata found in appinfo.ini files.")
+        target_folder = None
+
+        # Check for new folder not present in database
+        new_folders = [
+            f for f in current_subfolders if f not in known_db_paths]
+
+        if new_folders:
+            # If multiple new folders exist, pick the most recently modified
+            target_folder = max(new_folders, key=os.path.getmtime)
+            self.log(
+                f"🔎 Detected new application folder: {os.path.basename(target_folder)}")
+        elif current_subfolders:
+            # Fallback for updates: select the most recently modified existing folder
+            target_folder = max(current_subfolders, key=os.path.getmtime)
+            self.log(
+                f"🔄 Detected updated application folder: {os.path.basename(target_folder)}")
+
+        if not target_folder:
+            self.log("⚠️ No application folder detected after installation.")
             return
 
-        latest_ini = max(ini_files, key=os.path.getmtime)
-        latest_folder = os.path.dirname(
-            os.path.dirname(os.path.dirname(latest_ini)))
-        # latest_ini = ini_files[0]
-        # latest_folder = os.path.dirname(os.path.dirname(os.path.dirname(latest_ini)))
-        metadata = get_portable_apps_metadata(latest_folder)
+        # 3. Read metadata directly from the identified target folder
+        metadata = get_portable_apps_metadata(target_folder)
 
         if metadata:
             app_name = metadata.get('name', 'Unknown')
@@ -552,15 +585,15 @@ class WizardController(QObject):
 
             final_exe_path = None
             if start_exe_rel:
-                potential_exe = os.path.join(latest_folder, start_exe_rel)
+                potential_exe = os.path.join(target_folder, start_exe_rel)
                 if os.path.exists(potential_exe):
                     final_exe_path = os.path.abspath(potential_exe)
 
             if not final_exe_path:
-                for f in os.listdir(latest_folder):
+                for f in os.listdir(target_folder):
                     if f.lower().endswith('.exe'):
                         final_exe_path = os.path.abspath(
-                            os.path.join(latest_folder, f))
+                            os.path.join(target_folder, f))
                         break
 
             self.ui.appNameInput.setText(app_name)
@@ -585,7 +618,7 @@ class WizardController(QObject):
                 f"📦 Auto-confirming version for PAF: {app_version}. Continuing...")
             latest_ver = scoop_ver if scoop_ver else app_version
             self._finalize_app_install(
-                app_name, latest_folder, final_exe_path, app_version, latest_ver)
+                app_name, target_folder, final_exe_path, app_version, latest_ver)
         else:
             self.log("⚠️ No metadata found in appinfo.ini.")
 
