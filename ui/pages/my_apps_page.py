@@ -5,10 +5,11 @@ import subprocess
 import traceback
 import webbrowser
 
+# Third-Party Library Imports
 from PyQt5.QtCore import QFileInfo, QObject, Qt, QThread, pyqtSignal
 from PyQt5.QtGui import QCursor
 from PyQt5.QtWidgets import (QAction, QApplication, QDialog, QFileIconProvider,
-                             QGridLayout, QMenu, QMessageBox)
+                             QGridLayout, QMenu, QMessageBox, QProgressDialog)
 
 
 # Local Module Imports
@@ -16,9 +17,9 @@ from core.services.path_manager import PathManager
 from core.utils import get_folder_size_gb, is_update_available
 from locales.localization import _
 from locales.ui_localizer import localize_myapps_page
-from ui.dialogs.dialog_utils import create_styled_msgbox, ask_confirmation
+from ui.dialogs.dialog_utils import ask_confirmation, create_styled_msgbox
+from ui.styles.styles import DIALOG_LIGHT_STYLE, DIALOG_STYLE
 from ui.widgets.app_library_card import AppLibraryCard
-
 logger = logging.getLogger(__name__)
 
 
@@ -69,6 +70,53 @@ class FolderSizeWorker(QObject):
             except Exception as emit_error:
                 _write_trace(
                     f"[MY_APPS] worker emit failed request={self.request_id}: {emit_error}")
+
+
+class UninstallWorker(QThread):
+    """Worker thread to delete application files with real-time byte progress reporting."""
+
+    # Sends (deleted_bytes, total_bytes)
+    progress_updated = pyqtSignal(int, int)
+    finished_signal = pyqtSignal(bool, str)
+
+    def __init__(self, target_dir):
+        super().__init__()
+        self.target_dir = target_dir
+
+    def run(self):
+        try:
+            total_bytes = 0
+            file_list = []
+
+            # 1. Scan directory to calculate total byte size and build file list
+            for root, dirs, files in os.walk(self.target_dir):
+                for f in files:
+                    file_path = os.path.join(root, f)
+                    try:
+                        size = os.path.getsize(file_path)
+                        total_bytes += size
+                        file_list.append((file_path, size))
+                    except Exception:
+                        file_list.append((file_path, 0))
+
+            deleted_bytes = 0
+
+            # 2. Delete individual files and emit byte progress
+            for file_path, size in file_list:
+                try:
+                    os.chmod(file_path, 0o777)
+                    os.remove(file_path)
+                except Exception:
+                    pass
+                deleted_bytes += size
+                self.progress_updated.emit(deleted_bytes, total_bytes)
+
+            # 3. Clean up remaining empty directory tree
+            shutil.rmtree(self.target_dir, ignore_errors=True)
+
+            self.finished_signal.emit(True, "")
+        except Exception as e:
+            self.finished_signal.emit(False, str(e))
 
 
 class MyAppsController:
@@ -461,31 +509,75 @@ class MyAppsController:
                 self.log_app_activity("act_launch_failed", "error", app_name)
 
     def uninstall_app(self, app):
+        """Uninstalls the selected application, showing byte progress and removing shortcuts."""
         if ask_confirmation(
             self.main_window,
             'Επιβεβαίωση Κατάργησης',
             f"Είστε σίγουροι ότι θέλετε να απεγκαταστήσετε πλήρως το {app['name']};\nΌλα τα δεδομένα της εφαρμογής θα διαγραφούν μόνιμα."
         ):
-            try:
-                target_dir = app["dir"]
-                if not target_dir or target_dir == getattr(self.main_window, 'portable_root', ''):
-                    create_styled_msgbox(
-                        self.main_window, "Σφάλμα Ασφαλείας", "Ακύρωση: Ο φάκελος της εφαρμογής δεν βρέθηκε με ασφάλεια.").exec_()
-                    return
-                if os.path.exists(target_dir):
-                    shutil.rmtree(target_dir)
-                if hasattr(self.db, 'delete_app'):
-                    self.db.delete_app(app["name"])
-                self.refresh_data()
-                if hasattr(self.main_window, 'activity_manager'):
-                    self.log_app_activity(
-                        "act_uninstalled_app", "error", app.get('name'))
+            target_dir = app["dir"]
+            if not target_dir or target_dir == getattr(self.main_window, 'portable_root', ''):
+                create_styled_msgbox(
+                    self.main_window, "Σφάλμα Ασφαλείας", "Ακύρωση: Ο φάκελος της εφαρμογής δεν βρέθηκε με ασφάλεια.").exec_()
+                return
 
-                create_styled_msgbox(
-                    self.main_window, "Επιτυχία", f"Η εφαρμογή {app['name']} καταργήθηκε επιτυχώς!").exec_()
-            except Exception as e:
-                create_styled_msgbox(
-                    self.main_window, "Σφάλμα", f"Αποτυχία κατάργησης: {e}").exec_()
+            # Initialize non-cancelable Progress Dialog with active theme styling
+            progress = QProgressDialog(
+                f"Απεγκατάσταση του {app['name']}...", None, 0, 100, self.main_window)
+            progress.setWindowModality(Qt.WindowModal)
+
+            # Apply dynamic theme stylesheet matching application dialogs
+            theme = self.main_window.settings_controller.config.get(
+                "theme", "Modern Dark")
+            progress_style = DIALOG_LIGHT_STYLE if theme == "Modern Light" else DIALOG_STYLE
+            progress.setStyleSheet(progress_style)
+
+            progress.show()
+
+            self.uninstall_worker = UninstallWorker(target_dir)
+
+            def update_progress(deleted, total):
+                if total > 0:
+                    percent = int((deleted / total) * 100)
+                    deleted_mb = deleted / (1024 * 1024)
+                    total_mb = total / (1024 * 1024)
+                    progress.setLabelText(
+                        f"Διαγραφή αρχείων: {deleted_mb:.1f} MB / {total_mb:.1f} MB"
+                    )
+                    progress.setValue(percent)
+
+            def on_finished(success, error_msg):
+                progress.close()
+
+                # Remove shortcut (.lnk) from __Apps__ folder if it exists
+                if hasattr(self, 'portable_root') and self.portable_root:
+                    shortcut_path = os.path.join(
+                        self.portable_root, "__Apps__", f"{app['name']}.lnk")
+                    if os.path.exists(shortcut_path):
+                        try:
+                            os.remove(shortcut_path)
+                            logger.info(f"Deleted shortcut: {shortcut_path}")
+                        except Exception as err:
+                            logger.warning(
+                                f"Failed to delete shortcut {shortcut_path}: {err}")
+
+                if success:
+                    if hasattr(self.db, 'delete_app'):
+                        self.db.delete_app(app["name"])
+                    self.refresh_data()
+                    if hasattr(self.main_window, 'activity_manager'):
+                        self.log_app_activity(
+                            "act_uninstalled_app", "error", app.get('name'))
+
+                    create_styled_msgbox(
+                        self.main_window, "Επιτυχία", f"Η εφαρμογή {app['name']} καταργήθηκε επιτυχώς!").exec_()
+                else:
+                    create_styled_msgbox(
+                        self.main_window, "Σφάλμα", f"Αποτυχία κατάργησης: {error_msg}").exec_()
+
+            self.uninstall_worker.progress_updated.connect(update_progress)
+            self.uninstall_worker.finished_signal.connect(on_finished)
+            self.uninstall_worker.start()
 
     def show_options_menu(self, app):
         menu = QMenu(self.main_window)

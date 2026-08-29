@@ -1959,6 +1959,22 @@ QPushButton#primaryButton {
 QPushButton#primaryButton:hover {
     background-color: #75ABB0;
 }
+
+/* QProgressBar styling for Dark Mode Dialogs */
+QProgressBar {
+    background-color: #050505;
+    border: 1px solid #474747;
+    border-radius: 4px;
+    text-align: center;
+    color: #ffffff !important;
+    font-weight: bold;
+    min-height: 18px;
+}
+QProgressBar::chunk {
+    background-color: #2B9099;
+    border-radius: 3px;
+}
+
 """
 DIALOG_LIGHT_STYLE = """
 QDialog, QMessageBox, QInputDialog, QMessageBox QLabel, QDialog QLabel {
@@ -1996,6 +2012,21 @@ QPushButton#primaryButton {
 }
 QPushButton#primaryButton:hover {
     background-color: #75ABB0;
+}
+
+/* QProgressBar styling for Light Mode Dialogs */
+QProgressBar {
+    background-color: #F0F0F0;
+    border: 1px solid #CCCCCC;
+    border-radius: 4px;
+    text-align: center;
+    color: #1A1A1A !important;
+    font-weight: bold;
+    min-height: 18px;
+}
+QProgressBar::chunk {
+    background-color: #2B9099;
+    border-radius: 3px;
 }
 
 """
