@@ -1,31 +1,36 @@
-from ui.styles.styles import DIALOG_STYLE, DIALOG_LIGHT_STYLE
-from locales.ui_localizer import localize_wizard_page
-from locales.localization import _
-from core.utils import (get_portable_apps_metadata, is_internet_available,
-                        get_pe_version, get_pe_name, scan_ini_files)
-from core.services.path_manager import PathManager
-from core.services.installer import AppInstaller
-from core.api.scoop_api import ScoopAPI
-from core.api.chocolatey_api import ChocolateyAPI
+# Standard Library Imports
 import hashlib
-from difflib import SequenceMatcher
 import logging
 import os
 import platform
 import re
 import shutil
 import subprocess
-import webbrowser
 import unicodedata
+import webbrowser
 import zipfile
+from difflib import SequenceMatcher
 
+# Third-Party Library Imports
 import requests
 import win32com.client
 from PyQt5.QtCore import QEvent, QObject, QSize, Qt
 from PyQt5.QtGui import QIcon
-from PyQt5.QtWidgets import (QApplication, QDialog, QFileDialog, QHBoxLayout,
-                             QLabel, QLineEdit, QMessageBox,
-                             QPushButton, QVBoxLayout, QComboBox)
+from PyQt5.QtWidgets import (QApplication, QComboBox, QDialog, QFileDialog,
+                             QHBoxLayout, QLabel, QLineEdit, QMessageBox,
+                             QPushButton, QVBoxLayout)
+
+# Local Module Imports
+from core.api.chocolatey_api import ChocolateyAPI
+from core.api.scoop_api import ScoopAPI
+from core.services.installer import AppInstaller
+from core.services.path_manager import PathManager
+from core.utils import (get_pe_name, get_pe_version,
+                        get_portable_apps_metadata, is_internet_available,
+                        scan_ini_files)
+from locales.localization import _
+from locales.ui_localizer import localize_wizard_page
+from ui.styles.styles import DIALOG_LIGHT_STYLE, DIALOG_STYLE
 
 logger = logging.getLogger(__name__)
 
