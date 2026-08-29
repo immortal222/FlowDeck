@@ -504,6 +504,22 @@ class MyAppsController:
                     env=clean_env
                 )
                 self.log_app_activity("act_launch_success", "launch", app_name)
+            except OSError as e:
+                # Handle WinError 740: The requested operation requires elevation
+                if getattr(e, 'winerror', None) == 740:
+                    try:
+                        os.startfile(exe_path, 'runas')
+                        self.log_app_activity(
+                            "act_launch_success", "launch", app_name)
+                    except Exception as runas_error:
+                        logger.error(
+                            f"Error launching elevated app {app_name}: {runas_error}")
+                        self.log_app_activity(
+                            "act_launch_failed", "error", app_name)
+                else:
+                    logger.error(f"Error launching app {app_name}: {e}")
+                    self.log_app_activity(
+                        "act_launch_failed", "error", app_name)
             except Exception as e:
                 logger.error(f"Error launching app {app_name}: {e}")
                 self.log_app_activity("act_launch_failed", "error", app_name)
