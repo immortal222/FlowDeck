@@ -79,11 +79,15 @@ if __name__ == "__main__":
             "Application is already running! Signal sent to wake up. Exiting...")
         sys.exit(0)
 
-    # 4. --- GUI LOADING ---
+    # 3. --- GUI LOADING ---
     window = AppMainWindow(config_manager=config_manager)
     window.show()
 
-    # 5. --- HANDLE APP "WAKE UP" ---
+    # Close splash screen after main window is displayed
+    if pyi_splash and pyi_splash.is_alive():
+        pyi_splash.close()
+
+    # 4. --- HANDLE APP "WAKE UP" ---
     def bring_to_front():
         logger.info("Received signal: Bringing window to front!")
         window.showNormal()
