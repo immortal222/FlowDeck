@@ -1,21 +1,31 @@
+# Standard Library Imports
 import logging
-import requests
+
+# Third-Party Library Imports
 from packaging.version import parse as parse_version
+from PyQt5.QtCore import QThread, pyqtSignal
+import requests
+
+# Local Application Imports
+from locales.localization import _
 
 logger = logging.getLogger(__name__)
 
 
 def check_github_updates(username="immortal222", repo="FlowDeck", current_version="0.1.0"):
     """
-    Checks the GitHub API for the latest release.
+    Checks the API (local or GitHub) for the latest release metadata,
+    including version, download URL, and SHA-256 digest.
 
-    :param username: str - Your GitHub username or organization
-    :param repo: str - The name of the repository 
-    :param current_version: str - The current version of the application 
+    :param username: str - GitHub username or organization
+    :param repo: str - Name of the repository
+    :param current_version: str - Current application version
     """
+    # For local testing via XAMPP, targeting local mock API JSON endpoint
+    # url = "http://localhost/mock_release.json"
+    # Production endpoint alternative:
     url = f"https://api.github.com/repos/{username}/{repo}/releases/latest"
 
-    # It's good practice to include a User-Agent header in requests to the GitHub API
     headers = {'User-Agent': 'Python-Update-Checker'}
 
     try:
@@ -24,37 +34,77 @@ def check_github_updates(username="immortal222", repo="FlowDeck", current_versio
         if response.status_code == 200:
             data = response.json()
 
-            # The GitHub API returns the version in the "tag_name" field (e.g., "v1.2.0" or "1.2.0")
-            remote_tag = data.get("tag_name")
-
-            # We remove the 'v' prefix if it exists (e.g., "v1.2.0" -> "1.2.0")
+            remote_tag = data.get("tag_name", "")
             latest_version = remote_tag.lstrip('v')
 
-            # Version comparison
             if parse_version(latest_version) > parse_version(current_version):
+                download_url = None
+                digest = None
+
+                # Locate the zip asset and extract its download URL and digest
+                assets = data.get("assets", [])
+                for asset in assets:
+                    asset_name = asset.get("name", "")
+                    if asset_name.endswith(".zip"):
+                        download_url = asset.get("browser_download_url")
+                        # Strip "sha256:" prefix if present in the digest field
+                        raw_digest = asset.get("digest", "")
+                        if raw_digest and raw_digest.startswith("sha256:"):
+                            digest = raw_digest.replace("sha256:", "")
+                        else:
+                            digest = raw_digest
+                        break
+
                 update_info = {
                     "version": latest_version,
-                    # The title of the Release
                     "title": data.get("name"),
-                    # The changelog for the Release
                     "changelog": data.get("body"),
-                    # The link to the Release page
-                    "html_url": data.get("html_url")
+                    "html_url": data.get("html_url"),
+                    "download_url": download_url,
+                    "digest": digest
                 }
                 logger.info(
                     f"Update available: {latest_version} (Current: {current_version})")
-                return True, update_info
+                return True, update_info, None
             else:
-                return False, None
+                return False, None, None
 
         elif response.status_code == 404:
-            logger.warning(
-                "The repository was not found or has no releases yet.")
-            return False, None
+            logger.warning("Release metadata was not found.")
+            return False, None, _("upd_error_title", "Error")
         else:
-            logger.error(f"Error with GitHub API: HTTP {response.status_code}")
-            return False, None
+            logger.error(
+                f"Error checking updates: HTTP {response.status_code}")
+            return False, None, _("upd_title_error", "Network Error")
 
     except requests.exceptions.RequestException as e:
         logger.warning(f"Network error: {e}")
-        return False, None
+        return False, None, _("upd_no_server_text", "Unable to connect to the update server.\nPlease ensure the server is active and try again.")
+    except Exception as e:
+        logger.error(f"Unexpected error during version check: {e}")
+        return False, None, str(e)
+
+
+# Στην κλάση VersionCheckWorker:
+
+class VersionCheckWorker(QThread):
+    """
+    Worker thread to execute version check asynchronously without blocking the UI.
+    Signals:
+        finished: Emits (has_update: bool, update_info: dict|None, error_msg: str|None)
+    """
+    finished = pyqtSignal(bool, object, str)
+
+    def __init__(self, username="immortal222", repo="FlowDeck", current_version="0.1.0", parent=None):
+        super().__init__(parent)
+        self.username = username
+        self.repo = repo
+        self.current_version = current_version
+
+    def run(self):
+        is_available, update_info, error_msg = check_github_updates(
+            username=self.username,
+            repo=self.repo,
+            current_version=self.current_version
+        )
+        self.finished.emit(is_available, update_info, error_msg)

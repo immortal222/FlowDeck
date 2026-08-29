@@ -1,19 +1,24 @@
+# Standard Library Imports
 import logging
 import os
+import sys
 
-from PyQt5.QtCore import Qt, QUrl
+# Third-Party Library Imports
 from PyQt5 import QtGui, QtWidgets
-from PyQt5.QtWidgets import (QAction, QMainWindow, QMenu, QMessageBox,
-                             QSystemTrayIcon)
+from PyQt5.QtCore import Qt, QUrl
 from PyQt5.QtGui import QDesktopServices
+from PyQt5.QtWidgets import (QAction, QMainWindow, QMenu, QMessageBox,
+                             QProgressDialog, QSystemTrayIcon)
 
+# Local Application Imports
 from core.services.activity_manager import ActivityManager
 from core.services.config_manager import ConfigManager
+from core.services.constants import GITHUB_REPO, GITHUB_USERNAME, VERSION
 from core.services.database import DatabaseManager
 from core.services.path_manager import PathManager
 from core.services.update_manager import UpdateManager
-from core.services.version_check import check_github_updates
-from core.services.constants import VERSION, GITHUB_USERNAME, GITHUB_REPO
+from core.services.version_check import VersionCheckWorker
+from core.services.version_update import UpdateDownloaderWorker
 from locales.localization import _
 from locales.ui_localizer import localize_main_window
 from ui.generated.ui_main import Ui_MainWindow
@@ -107,13 +112,16 @@ class AppMainWindow(QMainWindow):
         # 11. Update Manager Initialization
         self.update_manager = UpdateManager(self, self.db)
 
-        self.update_manager.automatic_check_on_startup(
-            self.settings_controller.config,
-            self.settings_controller
-        )
+        # self.update_manager.automatic_check_on_startup(
+        #     self.settings_controller.config,
+        #     self.settings_controller
+        # )
 
         # 12. Check for GitHub updates if enabled
         self.check_for_github_updates()
+
+        # 13. Check if we just updated and show message / log activity
+        self.check_post_update_flag()
 
     def setup_tray_icon(self):
         self.tray_icon = QSystemTrayIcon(self)
@@ -191,46 +199,67 @@ class AppMainWindow(QMainWindow):
         self.raise_()
 
     def check_for_github_updates(self, from_about_dialog=False):
-        """Check for GitHub updates if enabled in config"""
+        """Check for GitHub updates asynchronously if enabled in config"""
         try:
-            # Check if update check is enabled
-            if from_about_dialog:
-                # If called from About dialog, always check for updates
-                pass
-            else:
+            if not from_about_dialog:
                 update_to_start = self.settings_controller.config.get(
                     "update_to_start", False)
-
                 if not update_to_start:
                     return
 
-            # Call check_github_updates with current version
+            self.from_about_dialog = from_about_dialog
             current_version = VERSION
-            has_update, update_info = check_github_updates(
+
+            # Initialize and start background worker
+            self.version_worker = VersionCheckWorker(
                 username=GITHUB_USERNAME,
                 repo=GITHUB_REPO,
-                current_version=current_version
+                current_version=current_version,
+                parent=self
             )
+            self.version_worker.finished.connect(
+                self._on_version_check_finished)
+            self.version_worker.start()
 
-            if has_update and update_info:
-                self.show_update_dialog(update_info)
-            elif from_about_dialog:
+        except Exception as e:
+            logger.error(f"Error checking for updates: {e}")
+
+    def _on_version_check_finished(self, has_update, update_info, error_msg=None):
+        """Handles the completion of the asynchronous version check."""
+        if error_msg:
+            # Show network/connection error popup if check failed
+            if getattr(self, 'from_about_dialog', False):
+                msg = QMessageBox(self)
+                msg.setIcon(QMessageBox.Warning)
+                msg.setWindowTitle(_("upd_title_error", "Network Error"))
+                msg.setText(error_msg)
+                msg.setStandardButtons(QMessageBox.Ok)
+                self.apply_dialog_theme(msg)
+                msg.exec_()
+            self.from_about_dialog = False
+            return
+
+        if has_update and update_info:
+            # Show update prompt window
+            self.show_update_dialog(update_info)
+        else:
+            # Show "No updates available" only if explicitly requested from About dialog and no errors occurred
+            if getattr(self, 'from_about_dialog', False):
                 msg = QMessageBox(self)
                 msg.setIcon(QMessageBox.Information)
                 msg.setWindowTitle(
                     _("no_updates_title", "No Updates Available"))
-                msg.setText(
-                    _("no_updates_text", "Your system is up to date. No updates are available at this time."))
+                msg.setText(_("no_updates_text", "Your system is up to date."))
                 msg.setStandardButtons(QMessageBox.Ok)
                 self.apply_dialog_theme(msg)
-                msg.exec()
-        except Exception as e:
-            logger.error(f"Error checking for updates: {e}")
+                msg.exec_()
+
+        self.from_about_dialog = False
 
     def show_update_dialog(self, update_info):
-        """Display update notification dialog"""
+        """Display update notification dialog with logic branch for compiled vs source code execution."""
         msg = QMessageBox(self)
-        msg.setWindowTitle(_("update_title", "Update Available"))
+        msg.setWindowTitle(_("upd_update_title", "Update Available"))
         msg.setTextInteractionFlags(Qt.TextBrowserInteraction)
 
         # Set icon
@@ -239,38 +268,222 @@ class AppMainWindow(QMainWindow):
             msg.setIconPixmap(QtGui.QPixmap(icon_path).scaled(
                 64, 64, Qt.KeepAspectRatio, Qt.SmoothTransformation))
 
-        # Get version and build message
+        # Get version and build message details
         new_version = update_info.get("version", "Unknown")
         title = update_info.get("title", "New Release")
         changelog = update_info.get("changelog", "")
-        html_url = update_info.get("html_url", "")
+        html_url = update_info.get(
+            "html_url", f"https://github.com/{GITHUB_USERNAME}/{GITHUB_REPO}/releases")
 
         # Truncate changelog if too long
         if len(changelog) > 300:
             changelog = changelog[:300] + "..."
 
-        msg.setText(
-            f"<h3>{_('update_available', 'New Version Available')}</h3>"
-            f"<p><b>{_('new_version', 'New Version')}:</b> {new_version}</p>"
-            f"<p><b>{_('release_title', 'Release')}:</b> {title}</p>"
-            f"<hr>"
-            f"<p><b>{_('changelog', 'Changelog')}:</b></p>"
-            f"<p style='font-size: 10px; max-height: 100px; overflow-y: auto;'>{changelog}</p>"
-            f"<hr>"
-            f"<p>{_('click_below', 'Click the button below to download the new version from GitHub.')}</p>"
+        # Check if running as compiled executable (sys.frozen) or from source code
+        is_frozen = getattr(sys, 'frozen', False)
+
+        if is_frozen:
+            # Compiled Executable Mode (.exe)
+            msg.setText(
+                f"<h3>{_('upd_update_available', 'New Version Available')}</h3>"
+                f"<p><b>{_('upd_new_version', 'New Version')}:</b> {new_version}</p>"
+                f"<p><b>{_('upd_release_title', 'Release')}:</b> {title}</p>"
+                f"<hr>"
+                f"<p><b>{_('upd_changelog', 'Changelog')}:</b></p>"
+                f"<p style='font-size: 10px; max-height: 100px; overflow-y: auto;'>{changelog}</p>"
+                f"<hr>"
+                f"<p>{_('upd_click_below', 'Click the button below to update FlowDeck.')}</p>"
+            )
+
+            update_button = msg.addButton(
+                _("upd_update_button", "Update Now"), QMessageBox.AcceptRole)
+            cancel_button = msg.addButton(
+                _("upd_cancel_button", "Later"), QMessageBox.RejectRole)
+
+            self.apply_dialog_theme(msg)
+            result = msg.exec_()
+
+            if result == QMessageBox.AcceptRole:
+                self.start_update_download(update_info)
+            else:
+                # User chose "Later", proceed with apps check
+                self.update_manager.automatic_check_on_startup(
+                    self.settings_controller.config,
+                    self.settings_controller
+                )
+        else:
+            # Source Code / Development Mode
+            msg.setText(
+                f"<h3>{_('upd_update_available', 'New Version Available')} (Dev Mode)</h3>"
+                f"<p><b>{_('upd_new_version', 'New Version')}:</b> {new_version}</p>"
+                f"<p><b>{_('upd_release_title', 'Release')}:</b> {title}</p>"
+                f"<hr>"
+                f"<p><b>{_('upd_changelog', 'Changelog')}:</b></p>"
+                f"<p style='font-size: 10px; max-height: 100px; overflow-y: auto;'>{changelog}</p>"
+                f"<hr>"
+                f"<p>{_('upd_source_mode_notice', 'You are running FlowDeck from source code. Please pull the latest changes from GitHub.')}</p>"
+            )
+
+            open_github_button = msg.addButton(
+                _("upd_open_github_button", "Open Releases Page"), QMessageBox.AcceptRole)
+            cancel_button = msg.addButton(
+                _("upd_cancel_button", "Later"), QMessageBox.RejectRole)
+
+            self.apply_dialog_theme(msg)
+            result = msg.exec_()
+
+            if result == QMessageBox.AcceptRole:
+                # Open the releases page in the default web browser
+                QDesktopServices.openUrl(QUrl(html_url))
+            else:
+                self.update_manager.automatic_check_on_startup(
+                    self.settings_controller.config,
+                    self.settings_controller
+                )
+
+    def start_update_download(self, update_info):
+        """Initializes the download worker and displays the progress dialog."""
+        download_url = update_info.get("download_url")
+        digest = update_info.get("digest")
+        new_version = update_info.get("version", "latest")
+
+        if not download_url:
+            QMessageBox.warning(self, "Error", "Download URL is missing.")
+            return
+
+        # Create Progress Dialog with Abort button
+        self.progress_dialog = QProgressDialog(
+            _("upd_progress_starting_download", "Starting download..."),
+            _("upd_progress_abort_button", "Abort"),
+            0,
+            100,
+            self
         )
+        self.progress_dialog.setWindowTitle(
+            _("upd_progress_window_title", "Downloading Update"))
+        self.progress_dialog.setWindowModality(Qt.WindowModal)
+        self.apply_dialog_theme(self.progress_dialog)
 
-        # Add Download button
-        download_button = msg.addButton(
-            _("download_button", "Download"), QMessageBox.AcceptRole)
-        cancel_button = msg.addButton(QMessageBox.Cancel)
+        # Target directory and executable name
+        target_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+        exe_name = "FlowDeck.exe"
 
-        self.apply_dialog_theme(msg)
+        # Initialize Background Worker Thread with new_version
+        self.update_worker = UpdateDownloaderWorker(
+            download_url, digest, target_dir, exe_name, new_version=new_version)
 
-        # Show dialog and handle result
-        result = msg.exec_()
-        if result == QMessageBox.AcceptRole and html_url:
-            QDesktopServices.openUrl(QUrl(html_url))
+        # Connect signals
+        self.update_worker.progress.connect(self.progress_dialog.setValue)
+        self.update_worker.status_changed.connect(
+            self.progress_dialog.setLabelText)
+        self.update_worker.finished.connect(self.on_update_download_finished)
+
+        # Connect Cancel button to worker
+        self.progress_dialog.canceled.connect(self.update_worker.cancel)
+
+        # Start execution
+        self.progress_dialog.show()
+        self.update_worker.start()
+
+    def on_update_download_finished(self, success, message):
+        """Handles the completion of the update download process."""
+        self.progress_dialog.close()
+
+        if success:
+            # Execute updater.exe directly from the extracted temp directory
+            extract_dir = message
+            updater_exe = os.path.join(extract_dir, "updater.exe")
+            config_json = os.path.join(extract_dir, "update_config.json")
+
+            if os.path.exists(updater_exe) and os.path.exists(config_json):
+                import subprocess
+                subprocess.Popen([updater_exe, config_json], cwd=extract_dir)
+                self.force_close_app()
+            else:
+                logger.error(
+                    "updater.exe or update_config.json not found in the extracted package.")
+                msg = QMessageBox(self)
+                msg.setIcon(QMessageBox.Critical)
+                msg.setWindowTitle(_("upd_error_title", "Error"))
+                msg.setText(_("upd_error_msg",
+                              "updater.exe or update_config.json was not found in the extracted package."))
+                msg.setStandardButtons(QMessageBox.Ok)
+                self.apply_dialog_theme(msg)
+                msg.exec_()
+        else:
+            # Check if the process was explicitly cancelled by the user
+            is_cancelled = getattr(self.update_worker, 'is_cancelled', False)
+
+            if is_cancelled:
+                # Show cancellation message directly without the failure header
+                msg = QMessageBox(self)
+                msg.setIcon(QMessageBox.Information)
+                msg.setWindowTitle(_("upd_update_title", "Information"))
+                msg.setText(message)
+                msg.setStandardButtons(QMessageBox.Ok)
+                self.apply_dialog_theme(msg)
+                msg.exec_()
+            else:
+                # Show error popup only for actual failures
+                msg = QMessageBox(self)
+                msg.setIcon(QMessageBox.Critical)
+                msg.setWindowTitle(
+                    _("upd_update_failed_title", "Update Failed"))
+                msg.setText(
+                    _("upd_update_failed_msg", "Update process failed:\n{error}").format(error=message))
+                msg.setStandardButtons(QMessageBox.Ok)
+                self.apply_dialog_theme(msg)
+                msg.exec_()
+
+            # Proceed with apps check ONLY if the update process was NOT triggered manually from the About dialog
+            if not getattr(self, 'from_about_dialog', False):
+                self.update_manager.automatic_check_on_startup(
+                    self.settings_controller.config,
+                    self.settings_controller
+                )
+
+    def check_post_update_flag(self):
+        """Checks for update_flag.json on startup, notifies user and logs activity."""
+        flag_path = os.path.join(os.path.dirname(
+            os.path.abspath(sys.argv[0])), "update_flag.json")
+        if not os.path.exists(flag_path):
+            return
+
+        try:
+            import json
+            with open(flag_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            if data.get("updated"):
+                version_str = data.get("version", VERSION)
+
+                # Show notification dialog
+                msg = QMessageBox(self)
+                msg.setIcon(QMessageBox.Information)
+                msg.setWindowTitle(
+                    _("upd_update_success_title", "Update Successful"))
+                msg.setText(
+                    _("upd_update_success_msg", "FlowDeck was successfully updated to version {version}.").format(version=version_str))
+                msg.setStandardButtons(QMessageBox.Ok)
+                self.apply_dialog_theme(msg)
+                msg.exec_()
+
+                # Log activity in Activity Log using the correct log() method
+                if hasattr(self, 'activity_manager'):
+                    self.activity_manager.log(
+                        message_key="upd_log_update_success",
+                        event_type="update",
+                        params={"version": version_str}
+                    )
+        except Exception as e:
+            logger.error(f"Error reading update_flag.json: {e}")
+        finally:
+            # Clean up flag file so dialog isn't repeated on subsequent launches
+            if os.path.exists(flag_path):
+                try:
+                    os.remove(flag_path)
+                except Exception as e:
+                    logger.error(f"Failed to delete update_flag.json: {e}")
 
     def show_about_dialog(self):
         # Localized strings for the About dialog

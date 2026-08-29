@@ -47,10 +47,23 @@ def _install_exception_hook():
     sys.excepthook = _handle_exception
 
 
+def _cleanup_leftover_updater():
+    clean_updater_file = PathManager.to_absolute_path('updater.exe')
+    try:
+        if os.path.exists(clean_updater_file):
+            os.remove(clean_updater_file)
+            logger.info("Cleaned up leftover updater.exe")
+    except Exception as e:
+        logger.error(f"Error during cleanup updater.exe. {e}")
+
+
 if __name__ == "__main__":
     _install_exception_hook()
     logger = setup_logging()
     logger.info("=== FlowDeck Start===")
+
+    # Clean up leftover updater.exe if present
+    _cleanup_leftover_updater()
 
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
