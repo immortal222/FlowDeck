@@ -30,3 +30,4 @@ file_version_info.txt
 logs/flowdeck_debug_trace.log
 logs/flowdeck_errors.log
 Versions/
+sync.ffs_db
