@@ -20,6 +20,7 @@ class DatabaseManager:
             self.db_path)
         self._ensure_database_health()
         self.create_tables()
+        self.backfill_install_methods()
 
     def _ensure_database_health(self):
         if not os.path.exists(self.db_path):
@@ -79,6 +80,7 @@ class DatabaseManager:
             local_path TEXT NOT NULL,
             exe_path TEXT NOT NULL,
             source TEXT DEFAULT 'manual',
+            install_method TEXT DEFAULT 'unknown',
             update_url TEXT,
             current_version TEXT DEFAULT '1.0',
             latest_version TEXT DEFAULT NULL,
@@ -92,24 +94,33 @@ class DatabaseManager:
             with self.get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute(query)
+                cursor.execute("PRAGMA table_info(apps)")
+                columns = [row[1] for row in cursor.fetchall()]
+                if "install_method" not in columns:
+                    cursor.execute(
+                        "ALTER TABLE apps ADD COLUMN install_method TEXT DEFAULT 'unknown'")
+                if "is_favorite" not in columns:
+                    cursor.execute(
+                        "ALTER TABLE apps ADD COLUMN is_favorite INTEGER DEFAULT 0")
                 conn.commit()
                 logger.info("Database initialized successfully.")
         except Exception as e:
             logger.error(f"Error creating tables: {e}")
 
-    def add_or_update_app(self, name, local_path, exe_path, source="manual", update_url="", current_version="1.0", latest_version=None, homepage=""):
+    def add_or_update_app(self, name, local_path, exe_path, source="manual", update_url="", current_version="1.0", latest_version=None, homepage="", install_method="unknown"):
         """Inserts or updates an application entry with relative paths if inside app root."""
         # Convert absolute paths to relative before writing to database
         rel_local_path = PathManager.to_relative_path(local_path)
         rel_exe_path = PathManager.to_relative_path(exe_path)
 
         query = """
-        INSERT INTO apps (name, local_path, exe_path, source, update_url, current_version, latest_version, homepage)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO apps (name, local_path, exe_path, source, install_method, update_url, current_version, latest_version, homepage)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(name) DO UPDATE SET
             local_path=excluded.local_path,
             exe_path=excluded.exe_path,
             source=excluded.source,
+            install_method=CASE WHEN excluded.install_method != 'unknown' THEN excluded.install_method ELSE apps.install_method END,
             update_url=excluded.update_url,
             current_version=excluded.current_version,
             latest_version=excluded.latest_version,
@@ -119,12 +130,31 @@ class DatabaseManager:
             with self.get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute(query, (name, rel_local_path, rel_exe_path,
-                               source, update_url, current_version, latest_version, homepage))
+                               source, install_method, update_url, current_version, latest_version, homepage))
                 conn.commit()
                 return True
         except Exception as e:
-            logger.error(
-                f"Failed to write {name} to the database.", exc_info=True)
+            error_msg = str(e).lower()
+            if "no such column: install_method" in error_msg or "has no column named install_method" in error_msg:
+                logger.warning(
+                    "Column 'install_method' missing. Adding it automatically...")
+                try:
+                    with self.get_connection() as conn:
+                        cursor = conn.cursor()
+                        cursor.execute(
+                            "ALTER TABLE apps ADD COLUMN install_method TEXT DEFAULT 'unknown'")
+                        cursor.execute(query, (name, rel_local_path, rel_exe_path,
+                                       source, install_method, update_url, current_version, latest_version, homepage))
+                        conn.commit()
+                        logger.info(
+                            f"Success after schema update: added/updated {name}")
+                        return True
+                except Exception as ex:
+                    logger.error(
+                        f"Failed to update schema or entry for {name}: {ex}", exc_info=True)
+            else:
+                logger.error(
+                    f"Failed to write {name} to the database.", exc_info=True)
             return False
 
     def get_all_apps(self):
@@ -256,3 +286,58 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Error updating app details for ID {app_id}: {e}")
             return False
+
+    def update_install_method(self, name, install_method):
+        """Updates the install method for an application."""
+        query = "UPDATE apps SET install_method = ? WHERE name = ?"
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(query, (install_method, name))
+                conn.commit()
+                return True
+        except Exception as e:
+            error_msg = str(e).lower()
+            if "no such column: install_method" in error_msg or "has no column named install_method" in error_msg:
+                logger.warning(
+                    "Column 'install_method' missing. Adding it automatically...")
+                try:
+                    with self.get_connection() as conn:
+                        cursor = conn.cursor()
+                        cursor.execute(
+                            "ALTER TABLE apps ADD COLUMN install_method TEXT DEFAULT 'unknown'")
+                        cursor.execute(query, (install_method, name))
+                        conn.commit()
+                        return True
+                except Exception as ex:
+                    logger.error(
+                        f"Failed to add column or update install_method: {ex}", exc_info=True)
+            else:
+                logger.error(f"Error updating install_method for {name}: {e}")
+            return False
+
+    def backfill_install_methods(self):
+        """Backfills unknown install_method columns based on local files and metadata."""
+        try:
+            from core.utils import get_portable_apps_metadata
+            apps = self.get_all_apps()
+            for app in apps:
+                current_method = app.get("install_method")
+                if not current_method or current_method == "unknown":
+                    local_path = app.get("local_path", "")
+                    if local_path and os.path.exists(local_path):
+                        if get_portable_apps_metadata(local_path):
+                            inferred = "paf"
+                        elif app.get("source") in ("scoop", "chocolatey"):
+                            inferred = app.get("source")
+                        else:
+                            inferred = "zip"
+                    else:
+                        inferred = app.get("source", "unknown") if app.get(
+                            "source") in ("scoop", "chocolatey") else "unknown"
+
+                    if inferred != "unknown":
+                        self.update_install_method(app["name"], inferred)
+        except Exception as e:
+            logger.error(
+                f"Error during install_method backfill: {e}", exc_info=True)

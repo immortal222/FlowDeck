@@ -222,6 +222,7 @@ def update_all_ini_files(root_folder, db):
                 local_path=app_folder,
                 exe_path=exe_path,
                 current_version=version,
+                install_method="paf",
             )
 
         updated_apps.append({

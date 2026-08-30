@@ -98,10 +98,17 @@ class ActivityManager:
         else:
             icon_file = "icons/activity_launch.png"
 
+        if isinstance(params, dict):
+            clean_params = params
+        elif isinstance(params, str):
+            clean_params = {"app_name": params}
+        else:
+            clean_params = {}
+
         new_event = {
             "icon_path": PathManager.get_asset_path(icon_file),
             "message_key": message_key,
-            "params": params if params else {},
+            "params": clean_params,
             "message": message_key,
             "timestamp": current_timestamp
         }
@@ -148,9 +155,16 @@ class ActivityManager:
             # Translation logic
             m_key = ev.get("message_key")
             m_params = ev.get("params", {})
+            if isinstance(m_params, str):
+                m_params = {"app_name": m_params}
+            elif not isinstance(m_params, dict):
+                m_params = {}
 
             if m_key:
-                display_text = _(m_key, m_key).format(**m_params)
+                try:
+                    display_text = _(m_key, m_key).format(**m_params)
+                except Exception:
+                    display_text = _(m_key, m_key)
             else:
                 display_text = ev.get('message', 'Unknown Event')
 

@@ -35,37 +35,108 @@ from ui.styles.styles import DIALOG_LIGHT_STYLE, DIALOG_STYLE
 logger = logging.getLogger(__name__)
 
 
-def _normalize_install_name(value):
+def _tokenize_install_name(value):
     if not value:
-        return ""
+        return []
 
-    text = unicodedata.normalize("NFKC", str(value)).lower()
-    text = text.replace("notepad ++", "notepad++")
-    text = re.sub(r"\.(exe|lnk|app)$", "", text)
+    text = unicodedata.normalize("NFKC", str(value))
+    # Strip compound extensions like .paf.exe, .zip, .7z, .exe
+    text = re.sub(r'(?i)\.paf\.exe$', '', text)
+    text = re.sub(r'(?i)\.(exe|lnk|app|zip|7z|paf)$', '', text)
+    # Strip version numbers like _3.13.1, -1.0, .8.9.6.4, v2.3 etc.
+    text = re.sub(r'[-_\s\.]v?(\d+[\.\d]*\w*)', ' ', text, flags=re.I)
+    # Preserve well-known compound names and abbreviations before camelCase split
+    text = re.sub(r'(?i)sqlite', 'sqlite', text)
+    text = re.sub(r'(?i)filezilla', 'filezilla', text)
+    text = re.sub(r'(?i)notepad\s*(\+\+|plus\s*plus|\+\s*\+)',
+                  'notepadplusplus', text)
+    text = re.sub(r'(?i)\bnpp\b', 'notepadplusplus', text)
+    # Split camelCase / PascalCase
+    text = re.sub(r'([a-z0-9])([A-Z])', r'\1 \2', text)
+    text = text.lower()
     text = re.sub(r"[+_\-./()]+", " ", text)
-    text = re.sub(r"\s+", " ", text).strip()
 
     ignored_tokens = {
         "app", "application", "portable", "edition", "media", "player",
-        "setup", "installer", "x64", "x86", "64bit", "32bit"
+        "setup", "installer", "x64", "x86", "64bit", "32bit", "win64", "win32",
+        "for", "the", "of", "and", "in", "to", "a", "an", "bin"
     }
-    tokens = [token for token in text.split() if token not in ignored_tokens]
-    return "".join(tokens)
+    alias_map = {
+        "db": "database",
+        "7z": "7zip",
+    }
+
+    tokens = []
+    for token in text.split():
+        token = token.strip()
+        if not token or token in ignored_tokens or token.isdigit():
+            continue
+        token = alias_map.get(token, token)
+        tokens.append(token)
+    return tokens
+
+
+def _normalize_install_name(value):
+    return "".join(_tokenize_install_name(value))
 
 
 def _score_install_name_match(left, right):
-    left_norm = _normalize_install_name(left)
-    right_norm = _normalize_install_name(right)
+    left_tokens = _tokenize_install_name(left)
+    right_tokens = _tokenize_install_name(right)
 
-    if not left_norm or not right_norm:
+    if not left_tokens or not right_tokens:
         return 0.0
-    if left_norm == right_norm:
+
+    left_set = set(left_tokens)
+    right_set = set(right_tokens)
+
+    # Direct token set equality
+    if left_set == right_set:
         return 1.0
 
-    ratio = SequenceMatcher(None, left_norm, right_norm).ratio()
-    if left_norm in right_norm or right_norm in left_norm:
-        ratio = max(ratio, 0.92)
+    # Jaccard and overlap
+    intersection = left_set.intersection(right_set)
+    if intersection:
+        jaccard = len(intersection) / len(left_set.union(right_set))
+        overlap = len(intersection) / min(len(left_set), len(right_set))
+        if overlap == 1.0 and jaccard >= 0.5:
+            return max(0.92, jaccard)
+        if jaccard >= 0.6:
+            return max(0.90, jaccard)
+
+    # String SequenceMatcher on sorted tokens and joined string
+    left_joined = "".join(left_tokens)
+    right_joined = "".join(right_tokens)
+    if left_joined == right_joined:
+        return 1.0
+    if left_joined in right_joined or right_joined in left_joined:
+        return 0.92
+
+    ratio = SequenceMatcher(None, "".join(
+        sorted(left_tokens)), "".join(sorted(right_tokens))).ratio()
     return ratio
+
+
+def extract_app_name_from_filename(filename):
+    """Extracts a clean candidate app name from a zip/7z/paf installer filename."""
+    name_no_ext = re.sub(r'(?i)\.(paf\.exe|paf|zip|7z)$', '', filename)
+    ver_match = re.search(r'[-_\s]v?(\d+\.\d+(?:\.\d+)*)', name_no_ext, re.I)
+    if ver_match:
+        raw_name = name_no_ext[:ver_match.start()]
+    else:
+        raw_name = name_no_ext
+    raw_name = re.sub(
+        r'(?i)[-_\s]*(portable|setup|installer|bin|x64|x86|win64)$', '', raw_name)
+    raw_name = re.sub(r'(?i)sqlite', 'SQLite ', raw_name)
+    raw_name = re.sub(r'(?i)filezilla', 'FileZilla ', raw_name)
+    raw_name = re.sub(r'([a-z0-9])([A-Z])', r'\1 \2', raw_name)
+    raw_name = re.sub(r'(?i)file\s*zilla', 'FileZilla', raw_name)
+    detected_name = raw_name.replace(
+        "-", " ").replace("_", " ").strip()
+    detected_name = re.sub(r'\s+', ' ', detected_name).title()
+    if "Filezilla" in detected_name or "File Zilla" in detected_name:
+        detected_name = re.sub(r'(?i)file\s*zilla', 'FileZilla', detected_name)
+    return detected_name if detected_name else name_no_ext
 
 
 class UnifiedInstallDialog(QDialog):
@@ -155,7 +226,7 @@ class UnifiedInstallDialog(QDialog):
 
         hint_layout = QHBoxLayout()
         self.db_match_label = QLabel(
-            _("wiz_db_name_found", f"Βρέθηκε το όνομα '{best_match}' στη βάση."))
+            _("wiz_db_name_found", "Βρέθηκε το όνομα '{name}' στη βάση.").format(name=best_match))
         self.db_match_label.setWordWrap(True)
         hint_layout.addWidget(self.db_match_label, 1)
 
@@ -508,10 +579,180 @@ class WizardController(QObject):
         else:
             self._handle_zip_flow(file_path)
 
+    def find_conflicting_app(self, candidate_name, incoming_method, filename=""):
+        """
+        Checks if an application with a similar name is already installed using a different install method.
+        Returns (app_dict, existing_method) if a conflict is found, otherwise None.
+        """
+        if not self.db or not hasattr(self.db, "get_all_apps") or (not candidate_name and not filename):
+            return None
+
+        best_match = None
+        best_score = 0.0
+
+        try:
+            apps = self.db.get_all_apps()
+            for app in apps:
+                db_name = app.get("name", "")
+                exe_name = os.path.basename(app.get("exe_path", ""))
+                folder_name = os.path.basename(app.get("local_path", ""))
+
+                scores = []
+                for query in filter(None, [candidate_name, filename]):
+                    for target in filter(None, [db_name, exe_name, folder_name]):
+                        scores.append(_score_install_name_match(query, target))
+
+                score = max(scores) if scores else 0.0
+                if score > best_score:
+                    best_score = score
+                    best_match = app
+        except Exception as e:
+            logger.error(f"Error checking app conflicts in DB: {e}")
+            return None
+
+        if not best_match or best_score < 0.88:
+            return None
+
+        existing_method = best_match.get("install_method", "unknown")
+        if not existing_method or existing_method == "unknown":
+            local_path = best_match.get("local_path", "")
+            if local_path and os.path.exists(local_path) and get_portable_apps_metadata(local_path):
+                existing_method = "paf"
+            elif best_match.get("source") in ("scoop", "chocolatey"):
+                existing_method = best_match.get("source")
+            else:
+                existing_method = "zip"
+
+        if incoming_method == "paf" and existing_method != "paf":
+            return best_match, existing_method
+        elif incoming_method != "paf" and existing_method == "paf":
+            return best_match, existing_method
+
+        return None
+
+    def _uninstall_existing_app(self, app_dict):
+        """
+        Uninstalls an existing application synchronously (deleting folder, shortcut, db entry).
+        Returns True if successful, False otherwise.
+        """
+        app_name = app_dict.get("name", "")
+        target_dir = app_dict.get("local_path", "")
+        if not target_dir or not os.path.exists(target_dir):
+            target_dir = app_dict.get("dir", "")
+
+        portable_root = self.portable_root or ""
+
+        # Safety check: do not delete portable root or invalid directory
+        if not target_dir or os.path.normpath(target_dir) == os.path.normpath(portable_root):
+            logger.error(
+                f"Safety check failed: cannot uninstall target directory {target_dir}")
+            return False
+
+        try:
+            self.log(_("wiz_conflict_uninstalling",
+                     "Uninstalling previous version of {app_name}...").format(app_name=app_name))
+
+            # Delete files
+            for root, dirs, files in os.walk(target_dir):
+                for f in files:
+                    file_path = os.path.join(root, f)
+                    try:
+                        os.chmod(file_path, 0o777)
+                        os.remove(file_path)
+                    except Exception:
+                        pass
+
+            shutil.rmtree(target_dir, ignore_errors=True)
+
+            # Remove shortcut (.lnk)
+            if portable_root:
+                shortcut_path = os.path.join(
+                    portable_root, "__Apps__", f"{app_name}.lnk")
+                if os.path.exists(shortcut_path):
+                    try:
+                        os.remove(shortcut_path)
+                    except Exception as err:
+                        logger.warning(
+                            f"Failed to delete shortcut {shortcut_path}: {err}")
+
+            # Delete from database
+            if hasattr(self.db, "delete_app"):
+                self.db.delete_app(app_name)
+
+            if hasattr(self.main_window, "my_apps_controller"):
+                self.main_window.my_apps_controller.refresh_data()
+
+            if hasattr(self.main_window, "activity_manager"):
+                self.main_window.activity_manager.log(
+                    "act_uninstalled_app",
+                    event_type="error",
+                    params={"app_name": app_name}
+                )
+
+            self.log(_("wiz_conflict_uninstall_success",
+                     "Previous version uninstalled. Continuing installation..."))
+            return True
+
+        except Exception as e:
+            logger.error(
+                f"Error uninstalling app {app_name}: {e}", exc_info=True)
+            self.log(_("wiz_conflict_uninstall_fail",
+                     "Uninstallation failed: {error}").format(error=e))
+            return False
+
+    def _handle_conflict_resolution(self, existing_app, existing_method, incoming_method):
+        """
+        Prompts user about conflict and uninstalls existing app if user confirms.
+        Returns True if resolved (uninstalled) and installation can continue, False if cancelled or failed.
+        """
+        app_name = existing_app.get("name", "Unknown")
+
+        msg = QMessageBox(self.main_window)
+        msg.setWindowTitle(_("wiz_conflict_title",
+                           "Existing Installation Detected"))
+        msg.setIcon(QMessageBox.Warning)
+        msg.setStyleSheet(self.get_msg_style())
+
+        msg.setText(_("wiz_conflict_msg",
+                    "The application '{app_name}' is already installed using a different method ({existing_method}).\n\nTo install the new version ({incoming_method}), the existing version must first be completely uninstalled to avoid orphaned or duplicate files.\n\nDo you want to proceed with Uninstall & Continue?").format(
+            app_name=app_name,
+            existing_method=existing_method.upper(),
+            incoming_method=incoming_method.upper()
+        ))
+
+        btn_uninstall = msg.addButton(
+            _("wiz_conflict_btn_uninstall_continue", "Uninstall & Continue"),
+            QMessageBox.AcceptRole
+        )
+        btn_uninstall.setObjectName("primaryButton")
+
+        btn_cancel = msg.addButton(
+            _("wiz_conflict_btn_cancel", "Cancel"),
+            QMessageBox.RejectRole
+        )
+        msg.setDefaultButton(btn_cancel)
+
+        msg.exec_()
+
+        if msg.clickedButton() == btn_uninstall:
+            return self._uninstall_existing_app(existing_app)
+        else:
+            return False
+
     def _handle_paf_flow(self, file_path):
         """Installation flow for .paf (PortableApps.com) files."""
         filename = os.path.basename(file_path)
         self.log("📦 PortableApps (.paf) file detected.")
+
+        candidate_name = extract_app_name_from_filename(filename)
+        conflict = self.find_conflicting_app(
+            candidate_name, incoming_method="paf", filename=filename)
+        if conflict:
+            existing_app, existing_method = conflict
+            if not self._handle_conflict_resolution(existing_app, existing_method, "paf"):
+                self.log(_("wiz_log_install_cancelled",
+                         "Installation cancelled by user."))
+                return
 
         # 1. Snapshot existing app paths from the database before running the installer
         known_db_paths = set()
@@ -623,7 +864,7 @@ class WizardController(QObject):
                 f"📦 Auto-confirming version for PAF: {app_version}. Continuing...")
             latest_ver = scoop_ver if scoop_ver else app_version
             self._finalize_app_install(
-                app_name, target_folder, final_exe_path, app_version, latest_ver)
+                app_name, target_folder, final_exe_path, app_version, latest_ver, install_method="paf")
         else:
             self.log("⚠️ No metadata found in appinfo.ini.")
 
@@ -649,6 +890,15 @@ class WizardController(QObject):
         raw_name = re.sub(
             r'(?i)[-_\s]*(portable|setup|installer|bin|x64|x86|win64)$', '', raw_name)
         detected_name = raw_name.replace("-", " ").replace("_", " ").title()
+
+        conflict = self.find_conflicting_app(
+            detected_name, incoming_method="zip", filename=filename)
+        if conflict:
+            existing_app, existing_method = conflict
+            if not self._handle_conflict_resolution(existing_app, existing_method, "zip"):
+                self.log(_("wiz_log_install_cancelled",
+                         "Installation cancelled by user."))
+                return
 
         self.update_sidebar(detected_name, None, _(
             "wiz_waiting", "Waiting..."))
@@ -771,8 +1021,21 @@ class WizardController(QObject):
         if dialog.exec_() == QDialog.Accepted:
             final_name, final_version, final_exe_rel = dialog.get_data()
 
-            # Rename Temp Folder to Final Name
+            # Clean up previous install folder if name changed or if an older installation folder exists
             final_target = os.path.join(self.portable_root, final_name)
+            existing_record = self.db.get_app_by_name(
+                final_name) if hasattr(self.db, "get_app_by_name") else None
+            if existing_record:
+                old_folder = existing_record.get("local_path", "")
+                if old_folder and os.path.exists(old_folder) and os.path.normpath(old_folder) != os.path.normpath(extracted_folder) and os.path.normpath(old_folder) != os.path.normpath(self.portable_root):
+                    try:
+                        shutil.rmtree(old_folder, ignore_errors=True)
+                        logger.info(
+                            f"Removed previous installation folder: {old_folder}")
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to remove previous installation folder {old_folder}: {e}")
+
             if os.path.abspath(extracted_folder) != os.path.abspath(final_target):
                 if os.path.exists(final_target):
                     shutil.rmtree(final_target, ignore_errors=True)
@@ -790,13 +1053,13 @@ class WizardController(QObject):
             self.log(_("wiz_log_version_set", "Version set: {final_version}").format(
                 final_version=final_version))
             self._finalize_app_install(
-                final_name, final_target, final_exe_path, final_version, latest_ver)
+                final_name, final_target, final_exe_path, final_version, latest_ver, install_method="zip")
         else:
             self.log(_("wiz_log_install_cancelled",
                      "Installation cancelled by user."))
             shutil.rmtree(extracted_folder, ignore_errors=True)
 
-    def _finalize_app_install(self, app_name, local_path, exe_path, version, latest_ver):
+    def _finalize_app_install(self, app_name, local_path, exe_path, version, latest_ver, install_method="unknown"):
         """Handles database registration and shortcut creation."""
         source = "manual"
         url = ""
@@ -810,6 +1073,14 @@ class WizardController(QObject):
                     'html_url', self.current_app_data.get('url', ''))
             homepage_url = self.current_app_data.get('homepage', '')
 
+        if install_method == "unknown":
+            if source in ("scoop", "chocolatey"):
+                install_method = source
+            elif get_portable_apps_metadata(local_path):
+                install_method = "paf"
+            else:
+                install_method = "zip"
+
         self.db.add_or_update_app(
             name=app_name,
             local_path=local_path,
@@ -818,7 +1089,8 @@ class WizardController(QObject):
             update_url=url,
             current_version=version,
             latest_version=latest_ver,
-            homepage=homepage_url
+            homepage=homepage_url,
+            install_method=install_method
         )
 
         self.create_shortcut(app_name, exe_path)
@@ -891,6 +1163,16 @@ class WizardController(QObject):
 
             version = app_data.get('version', '1.0')
             source = app_data.get('source', 'scoop')
+
+            conflict = self.find_conflicting_app(
+                app_name, incoming_method=source, filename=scoop_name)
+            if conflict:
+                existing_app, existing_method = conflict
+                if not self._handle_conflict_resolution(existing_app, existing_method, source):
+                    self.log(_("wiz_log_install_cancelled",
+                             "Installation cancelled by user."))
+                    return
+
             self.update_sidebar(app_name, app_data, _(
                 "wiz_status_downloading", "Downloading..."))
 
@@ -1182,6 +1464,20 @@ class WizardController(QObject):
                     final_exe_path = all_exes[0]
 
             if final_exe_path:
+                # Clean up previous install folder if an older installation folder exists under a different path
+                existing_record = self.db.get_app_by_name(
+                    app_name) if hasattr(self.db, "get_app_by_name") else None
+                if existing_record:
+                    old_folder = existing_record.get("local_path", "")
+                    if old_folder and os.path.exists(old_folder) and os.path.normpath(old_folder) != os.path.normpath(extracted_folder) and os.path.normpath(old_folder) != os.path.normpath(self.portable_root):
+                        try:
+                            shutil.rmtree(old_folder, ignore_errors=True)
+                            logger.info(
+                                f"Removed previous installation folder: {old_folder}")
+                        except Exception as e:
+                            logger.warning(
+                                f"Failed to remove previous installation folder {old_folder}: {e}")
+
                 source = app_data.get('source', 'scoop')
                 url = app_data.get('update_url', '')
                 if not url and source == 'github':
@@ -1197,7 +1493,8 @@ class WizardController(QObject):
                     update_url=url,
                     current_version=version,
                     latest_version=version,
-                    homepage=homepage_url
+                    homepage=homepage_url,
+                    install_method=source
                 )
 
                 self.create_shortcut(app_name, final_exe_path)

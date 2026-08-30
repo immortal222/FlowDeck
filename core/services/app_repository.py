@@ -159,7 +159,7 @@ class AppRepository:
                 f"Could not resolve shortcut target for {shortcut_file}: {exc}")
             return None
 
-    def add_or_update_app(self, name, local_path, exe_path, source="manual", update_url="", current_version="1.0", latest_version=None, homepage=""):
+    def add_or_update_app(self, name, local_path, exe_path, source="manual", update_url="", current_version="1.0", latest_version=None, homepage="", install_method="unknown"):
         return self.db.add_or_update_app(
             name=name,
             local_path=local_path,
@@ -168,10 +168,11 @@ class AppRepository:
             update_url=update_url,
             current_version=current_version,
             latest_version=latest_version,
-            homepage=homepage
+            homepage=homepage,
+            install_method=install_method
         )
 
-    def register_app(self, name, local_path, exe_path, source="manual", current_version="1.0", latest_version=None, homepage=""):
+    def register_app(self, name, local_path, exe_path, source="manual", current_version="1.0", latest_version=None, homepage="", install_method="unknown"):
         return self.add_or_update_app(
             name=name,
             local_path=local_path,
@@ -179,5 +180,6 @@ class AppRepository:
             source=source,
             current_version=current_version,
             latest_version=latest_version,
-            homepage=homepage
+            homepage=homepage,
+            install_method=install_method
         )
