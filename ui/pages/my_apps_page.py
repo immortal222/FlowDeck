@@ -529,18 +529,21 @@ class MyAppsController:
         """Uninstalls the selected application, showing byte progress and removing shortcuts."""
         if ask_confirmation(
             self.main_window,
-            'Επιβεβαίωση Κατάργησης',
-            f"Είστε σίγουροι ότι θέλετε να απεγκαταστήσετε πλήρως το {app['name']};\nΌλα τα δεδομένα της εφαρμογής θα διαγραφούν μόνιμα."
+            _("apps_uninstall_confirm_title", "Confirm Removal"),
+            _("apps_uninstall_confirm_text",
+              "Are you sure you want to completely uninstall {app_name}?\nAll application data will be permanently deleted.").format(app_name=app['name'])
         ):
             target_dir = app["dir"]
             if not target_dir or target_dir == getattr(self.main_window, 'portable_root', ''):
                 create_styled_msgbox(
-                    self.main_window, "Σφάλμα Ασφαλείας", "Ακύρωση: Ο φάκελος της εφαρμογής δεν βρέθηκε με ασφάλεια.").exec_()
+                    self.main_window,
+                    _("apps_security_error_title", "Security Error"),
+                    _("apps_security_error_text", "Cancelled: The application folder could not be safely located.")).exec_()
                 return
 
             # Initialize non-cancelable Progress Dialog with active theme styling
             progress = QProgressDialog(
-                f"Απεγκατάσταση του {app['name']}...", None, 0, 100, self.main_window)
+                _("apps_uninstall_progress_label", "Uninstalling {app_name}...").format(app_name=app['name']), None, 0, 100, self.main_window)
             progress.setWindowModality(Qt.WindowModal)
 
             # Apply dynamic theme stylesheet matching application dialogs
@@ -559,7 +562,9 @@ class MyAppsController:
                     deleted_mb = deleted / (1024 * 1024)
                     total_mb = total / (1024 * 1024)
                     progress.setLabelText(
-                        f"Διαγραφή αρχείων: {deleted_mb:.1f} MB / {total_mb:.1f} MB"
+                        _("apps_uninstall_deleting_files",
+                          "Deleting files: {deleted_mb:.1f} MB / {total_mb:.1f} MB").format(
+                            deleted_mb=deleted_mb, total_mb=total_mb)
                     )
                     progress.setValue(percent)
 
@@ -587,10 +592,14 @@ class MyAppsController:
                             "act_uninstalled_app", "error", app.get('name'))
 
                     create_styled_msgbox(
-                        self.main_window, "Επιτυχία", f"Η εφαρμογή {app['name']} καταργήθηκε επιτυχώς!").exec_()
+                        self.main_window,
+                        _("apps_uninstall_success_title", "Success"),
+                        _("apps_uninstall_success_text", "The application {app_name} was successfully removed!").format(app_name=app['name'])).exec_()
                 else:
                     create_styled_msgbox(
-                        self.main_window, "Σφάλμα", f"Αποτυχία κατάργησης: {error_msg}").exec_()
+                        self.main_window,
+                        _("apps_uninstall_fail_title", "Error"),
+                        _("apps_uninstall_fail_text", "Failed to uninstall: {error_msg}").format(error_msg=error_msg)).exec_()
 
             self.uninstall_worker.progress_updated.connect(update_progress)
             self.uninstall_worker.finished_signal.connect(on_finished)
@@ -638,8 +647,8 @@ class MyAppsController:
 
         act_folder = QAction(
             "📂 " + _("apps_open_folder", "Open Folder"), self.main_window)
-        act_folder.triggered.connect(lambda _, d=app_folder: os.startfile(d) if d and os.path.exists(
-            d) else QMessageBox.critical(self.main_window, "Σφάλμα", f"Ο φάκελος δεν βρέθηκε ή δεν είναι έγκυρος:\n{d}"))
+        act_folder.triggered.connect(lambda checked, d=app_folder: os.startfile(d) if d and os.path.exists(
+            d) else QMessageBox.critical(self.main_window, _("apps_folder_error_title", "Error"), _("apps_folder_error_text", "Folder not found or invalid:\n{folder_path}").format(folder_path=d)))
         menu.addAction(act_folder)
 
         homepage_url = app.get("homepage", "")
