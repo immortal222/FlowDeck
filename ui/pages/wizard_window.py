@@ -1045,7 +1045,7 @@ class WizardController(QObject):
 
             final_exe_path = os.path.abspath(
                 os.path.join(final_target, final_exe_rel))
-            latest_ver = scoop_ver if scoop_ver else final_version
+            latest_ver = scoop_ver if scoop_ver else ""
 
             self.ui.appNameInput.setText(final_name)
             self.ui.installButton.setProperty("final_version", final_version)
