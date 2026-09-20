@@ -505,6 +505,8 @@ class MyAppsController:
                     env=clean_env
                 )
                 self.log_app_activity("act_launch_success", "launch", app_name)
+                if hasattr(self.db, 'increment_usage'):
+                    self.db.increment_usage(app_name)
             except OSError as e:
                 # Handle WinError 740: The requested operation requires elevation
                 if getattr(e, 'winerror', None) == 740:

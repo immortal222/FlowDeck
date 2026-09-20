@@ -295,6 +295,24 @@ TRANSLATIONS = {
                         "• Ορφανές εγραφές εφαρμογών: {removed}\n"
                         "• Νέες εφαρμογές: {added}"),
 
+        # System Info
+        "set_ui_tab_system": "Σύστημα",
+        "set_ui_group_system_statistics": "ΣΤΑΤΙΣΤΙΚΑ ΣΥΣΤΗΜΑΤΟΣ",
+        "set_ui_group_system_info": "ΠΛΗΡΟΦΟΡΙΕΣ ΣΥΣΤΗΜΑΤΟΣ",
+        "set_ui_group_system_mostused": "ΠΙΟ ΧΡΗΣΙΜΕΣ ΕΦΑΡΜΟΓΕΣ",
+        "set_ui_group_system_bigapps": "ΜΕΓΑΛΥΤΕΡΕΣ ΕΦΑΡΜΟΓΕΣ",
+        "set_ui_lbl_sys_info_1": "Σύνολο Εφαρμογών:",
+        "set_ui_lbl_sys_info_2": "Χρειάζονται Ενημερώσεις:",
+        "set_ui_lbl_sys_info_3": "Αγαπημένες Εφαρμογές:",
+        "set_ui_lbl_sys_info_4": "Μέγεθος Φακέλου Εφαρμογών:",
+        "set_ui_lbl_sys_info_6": "Κατάσταση Βάσης:",
+        "set_db_status_ok": "OK",
+        "set_db_status_maintenance": "Χρειάζεται συντήρηση",
+        "set_ui_btn_log": "Άνοιγμα Log",
+        "set_err_open_log": "Αδυναμία ανοίγματος του αρχείου καταγραφής:\n{error}",
+        "set_warn_no_log_file": "Το αρχείο καταγραφής σφαλμάτων δεν έχει δημιουργηθεί ακόμη στο δίσκο.",
+
+
         # ------------------------------------------------------------------------#
         # --------------------------- Activity Manager page ----------------------#
         # ------------------------------------------------------------------------#
@@ -752,6 +770,26 @@ TRANSLATIONS = {
                         "• Database backup: Created successfully.\n"
                         "• Orphaned records removed: {removed}\n"
                         "• New portable applications detected: {added}"),
+
+        # System Info
+        "set_ui_tab_system": "System Info",
+        "set_ui_group_system_statistics": "SYSTEM STATISTICS",
+        "set_ui_group_system_info": "SYSTEM INFORMATION",
+        "set_ui_group_system_mostused": "MOST USED APPLICATIONS",
+        "set_ui_group_system_bigapps": "LARGEST APPLICATIONS    ",
+        "set_ui_lbl_sys_info_1": "Installed Apps:",
+        "set_ui_lbl_sys_info_2": "Need Update:",
+        "set_ui_lbl_sys_info_3": "Favorites:",
+        "set_ui_lbl_sys_info_4": "Apps Folder Size:",
+        "set_ui_lbl_sys_info_6": "Database Status:",
+        "set_db_status_ok": "OK",
+        "set_db_status_maintenance": "Needs Maintenance",
+        "set_ui_btn_log": "Open Log",
+        "set_err_open_log": "Could not open log file:\n{error}",
+        "set_warn_no_log_file": "The error log file does not exist yet on disk.",
+
+
+
         # ------------------------------------------------------------------------#
         # --------------------------- Activity Manager page ----------------------#
         # ------------------------------------------------------------------------#

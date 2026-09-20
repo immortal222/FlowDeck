@@ -19,6 +19,8 @@ from core.services.folder_renamer import FolderRenamer
 from core.services.maintenance_manager import MaintenanceManager
 from core.services.portable_scanner import PortableScanner
 from core.services.path_manager import PathManager
+from core.services.system_stats_service import SystemStatsService
+from core.services.constants import VERSION
 from locales.localization import _
 from locales.ui_localizer import localize_settings_page
 from ui.dialogs.dialog_utils import ask_confirmation
@@ -91,10 +93,99 @@ class SettingsController:
         self.db = main_window.db
         self.config = config_manager
 
+        # Initialize the SystemStatsService for gathering system statistics
+        self.stats_service = SystemStatsService(self.db, self.config)
+
         localize_settings_page(self.main_window)
 
         self.setup_ui()
         self.populate_ui()
+
+    def update_system_stats(self):
+        """Updates all system analytics labels in the settings page UI."""
+        stats = self.stats_service.get_all_stats()
+
+        # Βασικές πληροφορίες
+        if hasattr(self.ui, 'system_lbl_inst_app'):
+            self.ui.system_lbl_inst_app.setText(
+                str(stats.get('installed_apps', 0)))
+
+        if hasattr(self.ui, 'system_lbl_update'):
+            self.ui.system_lbl_update.setText(
+                str(stats.get('need_updates', 0)))
+
+        if hasattr(self.ui, 'system_lbl_favorites'):
+            self.ui.system_lbl_favorites.setText(
+                str(stats.get('favorites', 0)))
+
+        if hasattr(self.ui, 'system_lbl_size'):
+            self.ui.system_lbl_size.setText(
+                str(stats.get('apps_folder_size', '0 MB')))
+
+        if hasattr(self.ui, 'system_ldl_version'):
+            self.ui.system_ldl_version.setText(VERSION)
+
+        if hasattr(self.ui, 'system_lbl_dbcheck'):
+            db_status = stats.get('db_status', 'OK')
+            self.ui.system_lbl_dbcheck.setText(db_status)
+            if db_status == "OK":
+                self.ui.system_lbl_dbcheck.setStyleSheet(
+                    "color: #41CD52; font-weight: bold;")
+            else:
+                self.ui.system_lbl_dbcheck.setStyleSheet(
+                    "color: #E74C3C; font-weight: bold;")
+
+        if hasattr(self.ui, 'system_lbl_scoopver'):
+            self.ui.system_lbl_scoopver.setText(
+                str(stats.get('scoop_version', 'N/A')))
+
+        # Most Launched Apps (1-5)
+        most_launched = stats.get('most_launched', ['-'] * 5)
+        for i in range(1, 6):
+            lbl_name = f'system_lbl_most{i}'
+            if hasattr(self.ui, lbl_name):
+                getattr(self.ui, lbl_name).setText(most_launched[i - 1])
+
+        # Largest Folder Apps (1-5)
+        # Σημείωση: Το 1ο σε μέγεθος είναι το system_lbl_size, γι' αυτό τα υπόλοιπα 4 αντιστοιχούν στο 2-5
+        largest_apps = stats.get('largest_apps', ['-'] * 5)
+        for i in range(1, 6):
+            lbl_name = f'system_lbl_space{i}'
+            if hasattr(self.ui, lbl_name):
+                getattr(self.ui, lbl_name).setText(largest_apps[i - 1])
+
+        if hasattr(self.ui, 'system_btn_log'):
+            self.ui.system_btn_log.clicked.connect(self.open_log_file)
+
+    def open_log_file(self):
+        """Opens the application error log file (flowdeck_errors.log) in Notepad."""
+        root_dir = PathManager.get_root_dir()
+        log_path = os.path.join(root_dir, "logs", "flowdeck_errors.log")
+
+        if os.path.exists(log_path):
+            try:
+                subprocess.Popen(["notepad.exe", log_path])
+            except Exception as e:
+                logger.error(
+                    f"Failed to open error log file with Notepad: {e}")
+                try:
+                    os.startfile(log_path)
+                except Exception as ex:
+                    msg = QMessageBox(self.main_window)
+                    msg.setIcon(QMessageBox.Critical)
+                    msg.setWindowTitle(_("set_msg_title_error", "Error"))
+                    msg.setText(
+                        _("set_err_open_log", "Could not open log file:\n{error}").format(error=ex))
+                    msg.setStyleSheet(self.get_msg_style())
+                    msg.exec_()
+        else:
+            msg = QMessageBox(self.main_window)
+            msg.setIcon(QMessageBox.Warning)
+            msg.setWindowTitle(_("set_msg_title_warning", "Warning"))
+            msg.setText(_("set_warn_no_log_file",
+                        "The error log file does not exist yet on disk."))
+            msg.setStyleSheet(self.get_msg_style())
+            msg.exec_()
 
     def get_msg_style(self):
         """Returns stylesheet based on active theme."""
@@ -197,6 +288,9 @@ class SettingsController:
                 self.config.get("update_freq", "On Startup"))
             if freq_index >= 0:
                 self.ui.combo_updateFrequency.setCurrentIndex(freq_index)
+
+        # Update system statistics in the UI
+        self.update_system_stats()
 
     def browse_install_path(self):
         """Opens a directory selection dialog and checks if selected path is on a removable drive."""

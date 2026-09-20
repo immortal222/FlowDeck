@@ -163,6 +163,37 @@ def localize_settings_page(window):
         ui.settingsTabWidget.setTabText(
             3, _("set_ui_tab_maintenance", "Maintenance"))
 
+    # System Info Tab
+    if hasattr(ui, 'group_systemStatistics'):
+        ui.group_systemStatistics.setTitle(
+            _("set_ui_group_system_statistics", "SYSTEM STATISTICS"))
+    if hasattr(ui, 'group_systemInfo'):
+        ui.group_systemInfo.setTitle(
+            _("set_ui_group_system_info", "SYSTEM INFORMATION"))
+    if hasattr(ui, 'group_systemMostused'):
+        ui.group_systemMostused.setTitle(
+            _("set_ui_group_system_mostused", "MOST USED APPLICATIONS"))
+    if hasattr(ui, 'group_systemBigapps'):
+        ui.group_systemBigapps.setTitle(
+            _("set_ui_group_system_bigapps", "LARGEST APPLICATIONS"))
+    if hasattr(ui, 'system_lbl_1'):
+        ui.system_lbl_1.setText(_("set_ui_lbl_sys_info_1", "Installed Apps:"))
+    if hasattr(ui, 'system_lbl_2'):
+        ui.system_lbl_2.setText(_("set_ui_lbl_sys_info_2", "Need Update:"))
+    if hasattr(ui, 'system_lbl_3'):
+        ui.system_lbl_3.setText(_("set_ui_lbl_sys_info_3", "Favorites:"))
+    if hasattr(ui, 'system_lbl_4'):
+        ui.system_lbl_4.setText(
+            _("set_ui_lbl_sys_info_4", "Apps Folder Size:"))
+    if hasattr(ui, 'settingsTabWidget'):
+        ui.settingsTabWidget.setTabText(
+            4, _("set_ui_tab_system", "System"))
+    if hasattr(ui, 'system_lbl_6'):
+        ui.system_lbl_6.setText(_("set_ui_lbl_sys_info_6", "Database Status:"))
+    if hasattr(ui, 'system_btn_log'):
+        ui.system_btn_log.setText(_("set_ui_btn_log", "Open Log"))
+
+    # Save Settings Button
     if hasattr(ui, 'btn_saveSettings'):
         ui.btn_saveSettings.setText(
             _("set_ui_btn_save_settings", "Save Settings"))

@@ -320,6 +320,8 @@ class DashboardController:
                         params={"app_name": app_name}
                     )
                     logger.debug("Success logged successfully")
+                    if hasattr(self.db, 'increment_usage'):
+                        self.db.increment_usage(app_name)
 
                 except Exception as e:
                     logger.error(f"Launch error (Exception): {e}")

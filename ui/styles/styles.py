@@ -877,7 +877,11 @@ QGroupBox#group_theme,
 QGroupBox#group_updateFreq, 
 QGroupBox#group_updateStatus, 
 QGroupBox#group_language, 
-QGroupBox#group_dataMaintenance {
+QGroupBox#group_dataMaintenance,
+QGroupBox#group_systemStatistics,
+QGroupBox#group_systemInfo,
+QGroupBox#group_systemMostused,
+QGroupBox#group_systemBigapps {
     border: 1px solid #2D2D30;
     border-radius: 6px;
     margin-top: 24px;
@@ -895,7 +899,11 @@ QGroupBox#group_theme::title,
 QGroupBox#group_updateFreq::title, 
 QGroupBox#group_updateStatus::title, 
 QGroupBox#group_language::title, 
-QGroupBox#group_dataMaintenance::title {
+QGroupBox#group_dataMaintenance::title, 
+QGroupBox#group_systemStatistics::title, 
+QGroupBox#group_systemInfo::title, 
+QGroupBox#group_systemMostused::title, 
+QGroupBox#group_systemBigapps::title {
     subcontrol-origin: margin;
     subcontrol-position: top left;
     left: 15px;
@@ -1029,11 +1037,46 @@ QCheckBox#chk_enableSilentUpdater {
    ============================================================================ */
 
 /* Labels για την κατάσταση */
-QLabel#lbl_lastCheckTime {
+QLabel#lbl_lastCheckTime,
+QLabel#system_lbl_1,
+QLabel#system_lbl_2,
+QLabel#system_lbl_3,
+QLabel#system_lbl_4,
+QLabel#system_lbl_5,
+QLabel#system_lbl_6,
+QLabel#system_lbl_7,
+QLabel#system_lbl_8,
+QLabel#system_lbl_9,
+QLabel#system_lbl_10,
+QLabel#system_lbl_11,
+QLabel#system_lbl_12,
+QLabel#system_lbl_13,
+QLabel#system_lbl_14,
+QLabel#system_lbl_15,
+QLabel#system_lbl_16,
+QLabel#system_lbl_17,
+QLabel#system_lbl_inst_app,
+QLabel#system_lbl_update,
+QLabel#system_lbl_favorites,
+QLabel#system_lbl_size,
+QLabel#system_lbl_dbcheck,
+QLabel#system_lbl_scoopver,
+QLabel#system_ldl_version,
+QLabel#system_lbl_most1,
+QLabel#system_lbl_most2,
+QLabel#system_lbl_most3,
+QLabel#system_lbl_most4,
+QLabel#system_lbl_most5,
+QLabel#system_lbl_space1,
+QLabel#system_lbl_space2,
+QLabel#system_lbl_space3,
+QLabel#system_lbl_space4,
+QLabel#system_lbl_space5 {
     color: #A0AAB0;
     font-family: "Segoe UI", sans-serif;
     font-size: 12px;
 }
+
 
 
 
@@ -1766,7 +1809,11 @@ QGroupBox#group_theme,
 QGroupBox#group_updateFreq,
 QGroupBox#group_updateStatus,
 QGroupBox#group_language,
-QGroupBox#group_dataMaintenance {
+QGroupBox#group_dataMaintenance,
+QGroupBox#group_systemStatistics,
+QGroupBox#group_systemInfo,
+QGroupBox#group_systemMostused,
+QGroupBox#group_systemBigapps {
     border: 1px solid #DDDDDD;
     border-radius: 6px;
     margin-top: 24px;
@@ -1783,7 +1830,11 @@ QGroupBox#group_theme::title,
 QGroupBox#group_updateFreq::title,
 QGroupBox#group_updateStatus::title,
 QGroupBox#group_language::title,
-QGroupBox#group_dataMaintenance::title {
+QGroupBox#group_dataMaintenance::title,
+QGroupBox#group_systemStatistics::title,
+QGroupBox#group_systemInfo::title,
+QGroupBox#group_systemMostused::title,
+QGroupBox#group_systemBigapps::title {
     subcontrol-origin: margin;
     subcontrol-position: top left;
     left: 15px;
@@ -1914,11 +1965,47 @@ QCheckBox#chk_enableSilentUpdater {
    Labels
    ============================================================================ */
 
-QLabel#lbl_lastCheckTime {
+QLabel#lbl_lastCheckTime,
+QLabel#system_lbl_1,
+QLabel#system_lbl_2,
+QLabel#system_lbl_3,
+QLabel#system_lbl_4,
+QLabel#system_lbl_5,
+QLabel#system_lbl_6,
+QLabel#system_lbl_7,
+QLabel#system_lbl_8,
+QLabel#system_lbl_9,
+QLabel#system_lbl_10,
+QLabel#system_lbl_11,
+QLabel#system_lbl_12,
+QLabel#system_lbl_13,
+QLabel#system_lbl_14,
+QLabel#system_lbl_15,
+QLabel#system_lbl_16,
+QLabel#system_lbl_17,
+QLabel#system_lbl_inst_app,
+QLabel#system_lbl_update,
+QLabel#system_lbl_favorites,
+QLabel#system_lbl_size,
+QLabel#system_lbl_dbcheck,
+QLabel#system_lbl_scoopver,
+QLabel#system_ldl_version,
+QLabel#system_lbl_most1,
+QLabel#system_lbl_most2,
+QLabel#system_lbl_most3,
+QLabel#system_lbl_most4,
+QLabel#system_lbl_most5,
+QLabel#system_lbl_space1,
+QLabel#system_lbl_space2,
+QLabel#system_lbl_space3,
+QLabel#system_lbl_space4,
+QLabel#system_lbl_space5 {
     color: #666666;
     font-family: "Segoe UI", sans-serif;
     font-size: 12px;
 }
+
+
 
 """
 
