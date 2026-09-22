@@ -109,7 +109,7 @@ class SystemStatsService:
 
     def _get_scoop_catalog_version(self):
         try:
-            scoop_db_path = PathManager.get_database_path("scoop_catalog.db")
+            scoop_db_path = PathManager.get_resource_path("scoop_catalog.db")
             if os.path.exists(scoop_db_path):
                 with sqlite3.connect(scoop_db_path) as conn:
                     cursor = conn.cursor()

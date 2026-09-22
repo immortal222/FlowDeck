@@ -19,6 +19,8 @@ class ScoopAPI:
             "extras": "https://raw.githubusercontent.com/ScoopInstaller/Extras/master/bucket/{}.json"
         }
         self.catalog_db = PathManager.get_resource_path("scoop_catalog.db")
+        print(
+            f"[ScoopAPI] Initialized with catalog database at: {self.catalog_db}")
 
     def search_app(self, app_name):
         """Searches for an application in Scoop buckets. Returns metadata dictionary or None."""
@@ -55,24 +57,29 @@ class ScoopAPI:
                     f"Network error while searching for {app_name}: {e}")
 
         # Phase B: Local catalog database lookup (fallback)
-        clean_input = app_name.lower().strip().replace(
-            " ", "").replace("-", "").replace("_", "").replace(".", "")
+        search_term = app_name.strip()
+
+        print(f"\n--- [SCOOP DEBUG] ---")
+        print(f"--> Incoming App Name: '{app_name}'")
+        print(f"--> Search Term for DB Query: '{search_term}'")
 
         if os.path.exists(self.catalog_db):
             try:
                 conn = sqlite3.connect(self.catalog_db)
                 cursor = conn.cursor()
 
-                # Compare normalized strings to match regardless of separators or spaces
+                # Simple case-insensitive query using LIKE
                 cursor.execute("""
                     SELECT scoop_id, bucket FROM apps 
-                    WHERE REPLACE(REPLACE(REPLACE(user_friendly_name, ' ', ''), '-', ''), '_', '') = ?
-                       OR REPLACE(REPLACE(REPLACE(scoop_id, ' ', ''), '-', ''), '_', '') = ?
+                    WHERE user_friendly_name LIKE ? OR scoop_id LIKE ?
                     LIMIT 1
-                """, (clean_input, clean_input))
+                """, (search_term, search_term))
 
                 result = cursor.fetchone()
                 conn.close()
+
+                print(f"--> DB Query Result: {result}")
+                print(f"---------------------\n")
 
                 if result:
                     db_scoop_id, db_bucket = result[0], result[1]

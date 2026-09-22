@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Form implementation generated from reading ui file 'ui/ui_main_v4.ui'
+# Form implementation generated from reading ui file 'ui\ui_main_v4.ui'
 #
 # Created by: PyQt5 UI code generator 5.15.11
 #
@@ -461,7 +461,7 @@ class Ui_MainWindow(object):
         self.dash_favScrollContent.setWidgetResizable(True)
         self.dash_favScrollContent.setObjectName("dash_favScrollContent")
         self.scrollAreaWidgetContents = QtWidgets.QWidget()
-        self.scrollAreaWidgetContents.setGeometry(QtCore.QRect(0, 0, 18, 18))
+        self.scrollAreaWidgetContents.setGeometry(QtCore.QRect(0, 0, 98, 28))
         self.scrollAreaWidgetContents.setObjectName("scrollAreaWidgetContents")
         self.gridLayout_3 = QtWidgets.QGridLayout(self.scrollAreaWidgetContents)
         self.gridLayout_3.setObjectName("gridLayout_3")
@@ -1068,7 +1068,7 @@ class Ui_MainWindow(object):
         self.myApps_scrollArea.setWidgetResizable(True)
         self.myApps_scrollArea.setObjectName("myApps_scrollArea")
         self.myApps_scrollContent = QtWidgets.QWidget()
-        self.myApps_scrollContent.setGeometry(QtCore.QRect(0, 0, 669, 413))
+        self.myApps_scrollContent.setGeometry(QtCore.QRect(0, 0, 98, 28))
         self.myApps_scrollContent.setObjectName("myApps_scrollContent")
         self.gridLayout_2 = QtWidgets.QGridLayout(self.myApps_scrollContent)
         self.gridLayout_2.setObjectName("gridLayout_2")
@@ -1088,7 +1088,7 @@ class Ui_MainWindow(object):
 
         self.retranslateUi(MainWindow)
         self.contentStackedWidget.setCurrentIndex(2)
-        self.settingsTabWidget.setCurrentIndex(4)
+        self.settingsTabWidget.setCurrentIndex(0)
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
 
     def retranslateUi(self, MainWindow):
