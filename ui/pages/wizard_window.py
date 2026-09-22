@@ -25,7 +25,7 @@ from core.api.chocolatey_api import ChocolateyAPI
 from core.api.scoop_api import ScoopAPI
 from core.services.installer import AppInstaller
 from core.services.path_manager import PathManager
-from core.utils import (get_pe_name, get_pe_version,
+from core.utils import (get_normalized_app_name, get_pe_name, get_pe_version,
                         get_portable_apps_metadata, is_internet_available,
                         scan_ini_files)
 from locales.localization import _
@@ -353,7 +353,10 @@ class WizardController(QObject):
                      "Unable to connect to the internet."))
             return None
 
-        app_data = self.scoop.search_app(app_name)
+        # Convert app_name into candidates list if it is a string
+        candidates = get_normalized_app_name(
+            app_name) if isinstance(app_name, str) else app_name
+        app_data = self.scoop.search_app(candidates)
 
         if not isinstance(app_data, dict):
             app_data = None

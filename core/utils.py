@@ -249,26 +249,62 @@ def get_clean_app_name(name):
 
     # Keep only alphanumeric characters, spaces, hyphens, and underscores
     cleaned = "".join([c for c in name if c.isalnum()
-                      or c.isspace() or c in ('-', '_')])
+                      or c.isspace() or c in ('-', '_', '.')])
     return " ".join(cleaned.split()).title()
 
 
 def get_normalized_app_name(name):
-    """Normalizes common PE/folder name variants into a display-friendly app name."""
+    """
+    Processes a raw application name and generates a list of candidate strings ordered by specificity:
+    - Candidate 1: Suffixes removed (.portable, -portable, .exe, x64, etc.)
+    - Candidate 2: Domain/Brand structure preserved (e.g., draw.io) OR cleaned name
+    - Candidate 3: Root keyword before any punctuation (e.g., draw)
+    """
     if not name:
-        return ""
+        return []
 
-    text = str(name)
-    for token in [
+    text = str(name).strip()
+
+    # Special case for Notepad++
+    if "notepad++" in text.lower().replace(" ", ""):
+        return ["Notepad++"]
+
+    candidates = []
+
+    # Candidate 1: Remove common technical suffixes
+    suffixes = [
         "_portable", "-portable", ".portable", " portable", " Application",
         " application", " applications", " app", " installer", " install",
         " setup", "x64", "x86", "64bit", "32bit", " beta", " preview",
         " release"
-    ]:
-        text = text.replace(token, "")
+    ]
+    cand1 = text
+    for suf in suffixes:
+        pattern = re.compile(re.escape(suf) + r'$', re.IGNORECASE)
+        cand1 = pattern.sub('', cand1).strip()
 
-    text = text.replace("notepad ++", "Notepad++")
-    return get_clean_app_name(text)
+    if cand1:
+        candidates.append(cand1)
+
+    # Candidate 2: Preserve brand/domain format (e.g., draw.io) or clean punctuation
+    is_domain = bool(re.search(r'\.[a-z]{2,4}$', cand1, re.IGNORECASE))
+    if is_domain:
+        cand2 = cand1
+    else:
+        cand2 = re.sub(r'[.\-_]+', ' ', cand1)
+        cand2 = " ".join(cand2.split()).title()
+
+    if cand2 and cand2 not in candidates:
+        candidates.append(cand2)
+
+    # Candidate 3: Extract root keyword before first punctuation symbol (., -, _, space)
+    root_match = re.split(r'[.\-_ ]', cand1)
+    if root_match and root_match[0]:
+        cand3 = root_match[0].strip()
+        if cand3 and cand3 not in candidates:
+            candidates.append(cand3)
+
+    return candidates
 
 
 def get_safe_folder_path(base_dir, desired_name, current_path=None):
@@ -344,24 +380,51 @@ def get_pe_version(exe_path):
 
 
 def get_pe_name(file_path):
+    """
+    Extracts raw application name from PE executable metadata using standard hierarchy:
+    1. ProductName
+    2. FileDescription
+    3. OriginalFilename (without .exe extension)
+    """
+    product_name = None
+    file_desc = None
+    original_fn = None
+
+    pe = None
     try:
         pe = pefile.PE(file_path)
-        if not hasattr(pe, 'FileInfo'):
-            logger.warning("No version info found")
+        if hasattr(pe, 'FileInfo'):
+            for file_info in pe.FileInfo:
+                for info_block in file_info:
+                    if hasattr(info_block, 'StringTable'):
+                        for entry in info_block.StringTable:
+                            for key, value in entry.entries.items():
+                                key_str = key.decode('utf-8', errors='ignore')
+                                val_str = value.decode(
+                                    'utf-8', errors='ignore').strip()
 
-        # Iterate through the parsed FileInfo structures
-        for file_info in pe.FileInfo:
-            for info_block in file_info:
-                # Look specifically for StringTable objects
-                if hasattr(info_block, 'StringTable'):
-                    for entry in info_block.StringTable:
-                        # Look for the 'ProductName' or 'FileDescription' keys
-                        for key, value in entry.entries.items():
-                            key_str = key.decode('utf-8', errors='ignore')
-                            if key_str == 'ProductName':
-                                return get_normalized_app_name(value.decode('utf-8', errors='ignore'))
+                                if key_str == 'ProductName' and val_str:
+                                    product_name = val_str
+                                elif key_str == 'FileDescription' and val_str:
+                                    file_desc = val_str
+                                elif key_str == 'OriginalFilename' and val_str:
+                                    original_fn = val_str
     except Exception as e:
-        logger.error(f"Error loading file: {e}")
+        logger.error(f"Error loading PE metadata from {file_path}: {e}")
     finally:
-        pe.close()
+        if pe:
+            pe.close()
+
+    # Priority 1: ProductName
+    if product_name:
+        return product_name
+
+    # Priority 2: FileDescription
+    if file_desc:
+        return file_desc
+
+    # Priority 3: OriginalFilename
+    if original_fn:
+        return re.sub(r'(?i)\.exe$', '', original_fn).strip()
+
     return None
