@@ -2,6 +2,7 @@
 import logging
 import os
 import sqlite3
+from urllib.parse import quote_plus
 
 # Third-Party Library Imports
 import requests
@@ -59,6 +60,13 @@ class ScoopAPI:
                     logger.info(
                         f"Found {primary_name} in bucket '{bucket_name}'.")
 
+                    # Determine homepage URL or fallback to Google Search link
+                    homepage = data.get("homepage", "")
+                    if isinstance(homepage, list) and homepage:
+                        homepage = homepage[0]
+                    if not homepage:
+                        homepage = f"https://www.google.com/search?q={quote_plus(primary_name)}"
+
                     return {
                         "name": data.get("name", primary_name),
                         "version": data.get("version", "1.0"),
@@ -66,7 +74,7 @@ class ScoopAPI:
                         "url": data.get("url"),
                         "source": "scoop",
                         "bucket": bucket_name,
-                        "homepage": data.get("homepage", ""),
+                        "homepage": homepage,
                         "architecture": data.get("architecture"),
                         "bin": data.get("bin")
                     }
@@ -134,6 +142,14 @@ class ScoopAPI:
 
                     if response.status_code == 200:
                         data = response.json()
+
+                        # Determine homepage URL or fallback to Google Search link
+                        homepage = data.get("homepage", "")
+                        if isinstance(homepage, list) and homepage:
+                            homepage = homepage[0]
+                        if not homepage:
+                            homepage = f"https://www.google.com/search?q={quote_plus(primary_name)}"
+
                         return {
                             "name": data.get("name", primary_name),
                             "version": data.get("version", "1.0"),
@@ -141,7 +157,7 @@ class ScoopAPI:
                             "url": data.get("url"),
                             "source": "scoop",
                             "bucket": db_bucket,
-                            "homepage": data.get("homepage", ""),
+                            "homepage": homepage,
                             "architecture": data.get("architecture"),
                             "bin": data.get("bin")
                         }

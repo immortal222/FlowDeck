@@ -10,6 +10,7 @@ import unicodedata
 import webbrowser
 import zipfile
 from difflib import SequenceMatcher
+from urllib.parse import quote_plus
 
 # Third-Party Library Imports
 import requests
@@ -119,23 +120,28 @@ def _score_install_name_match(left, right):
 
 def extract_app_name_from_filename(filename):
     """Extracts a clean candidate app name from a zip/7z/paf installer filename."""
+    # Strip file extensions (.paf.exe, .paf, .zip, .7z)
     name_no_ext = re.sub(r'(?i)\.(paf\.exe|paf|zip|7z)$', '', filename)
+
+    # Locate and strip version strings
     ver_match = re.search(r'[-_\s]v?(\d+\.\d+(?:\.\d+)*)', name_no_ext, re.I)
     if ver_match:
         raw_name = name_no_ext[:ver_match.start()]
     else:
         raw_name = name_no_ext
+
+    # Remove common technical suffixes
     raw_name = re.sub(
         r'(?i)[-_\s]*(portable|setup|installer|bin|x64|x86|win64)$', '', raw_name)
-    raw_name = re.sub(r'(?i)sqlite', 'SQLite ', raw_name)
-    raw_name = re.sub(r'(?i)filezilla', 'FileZilla ', raw_name)
+
+    # Split camelCase / PascalCase
     raw_name = re.sub(r'([a-z0-9])([A-Z])', r'\1 \2', raw_name)
-    raw_name = re.sub(r'(?i)file\s*zilla', 'FileZilla', raw_name)
+
+    # Replace separators with spaces and sanitize whitespace
     detected_name = raw_name.replace(
         "-", " ").replace("_", " ").strip()
     detected_name = re.sub(r'\s+', ' ', detected_name).title()
-    if "Filezilla" in detected_name or "File Zilla" in detected_name:
-        detected_name = re.sub(r'(?i)file\s*zilla', 'FileZilla', detected_name)
+
     return detected_name if detected_name else name_no_ext
 
 
@@ -437,6 +443,11 @@ class WizardController(QObject):
             homepage = scoop_data.get('homepage', '')
             if isinstance(homepage, list) and len(homepage) > 0:
                 homepage = homepage[0]
+
+            # Fallback to Google Search if homepage is empty
+            if not homepage:
+                homepage = f"https://www.google.com/search?q={quote_plus(app_name)}"
+
             self.current_app_url = homepage
             url_enabled = bool(self.current_app_url)
         else:
@@ -445,6 +456,10 @@ class WizardController(QObject):
             status_text = f"<span style='color: #ff4c4c;'>{_('wiz_out_of_api', 'Outside API')}</span>"
             desc = _("wiz_no_online_info",
                      "No online information found. Installation will proceed using local data.")
+
+            # Fallback to Google Search for apps outside API
+            self.current_app_url = f"https://www.google.com/search?q={quote_plus(app_name)}"
+            url_enabled = True
 
         # Handle icon or emoji rendering
         if hasattr(self.ui, 'sidebarIcon'):
@@ -865,7 +880,7 @@ class WizardController(QObject):
 
             self.log(
                 f"📦 Auto-confirming version for PAF: {app_version}. Continuing...")
-            latest_ver = scoop_ver if scoop_ver else app_version
+            latest_ver = scoop_ver if scoop_ver else ""
             self._finalize_app_install(
                 app_name, target_folder, final_exe_path, app_version, latest_ver, install_method="paf")
         else:
@@ -1075,6 +1090,10 @@ class WizardController(QObject):
                 url = self.current_app_data.get(
                     'html_url', self.current_app_data.get('url', ''))
             homepage_url = self.current_app_data.get('homepage', '')
+
+        # Fallback to Google Search URL if homepage_url is empty
+        if not homepage_url:
+            homepage_url = f"https://www.google.com/search?q={quote_plus(app_name)}"
 
         if install_method == "unknown":
             if source in ("scoop", "chocolatey"):
