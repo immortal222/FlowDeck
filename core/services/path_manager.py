@@ -52,7 +52,7 @@ class PathManager:
         return os.path.join(PathManager.get_root_dir(), "config.json").replace("\\", "/")
 
     @staticmethod
-    def get_database_path(db_name="linkweave.db"):
+    def get_database_path(db_name="flowdeck.db"):
         """Returns the path for the SQLite database file."""
         return os.path.join(PathManager.get_root_dir(), db_name).replace("\\", "/")
 

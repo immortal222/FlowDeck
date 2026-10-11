@@ -7,7 +7,7 @@ class SingleInstance(QObject):
 
     show_main_window = pyqtSignal()
 
-    def __init__(self, server_name="LinkWeaveApp_Server"):
+    def __init__(self, server_name="FlowDeckApp_Server"):
         super().__init__()
         self.server_name = server_name
         self.is_running = False

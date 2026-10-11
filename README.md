@@ -57,7 +57,7 @@ Once an application is detected, FlowDeck communicates with the **Scoop API** an
 FlowDeck/
 │
 ├── main.py                     # Primary entry point of the application
-├── linkweave.db                # SQLite Database (storing apps, paths, and favorites)
+├── flowdeck.db                # SQLite Database (storing apps, paths, and favorites)
 │
 ├── core/                       # Core business logic
 │   ├── api/                    # Scoop & Chocolatey API connectors
@@ -114,6 +114,7 @@ FlowDeck itself is released under the GNU GPLv3 License. Feel free to use, modif
 * Implement 1-Click Update for ZIP-based applications directly from the UI.
 * Add a background scheduler for automatic orphan folder detection.
 * Enrich the HTML Activity Timeline with interactive statistical charts.
+* When checking for updates, change text to button
 
 ## Acknowledgements / Credits
 * Developed with the assistance of **Google Gemini**, which helped with code generation, structuring, and troubleshooting.
