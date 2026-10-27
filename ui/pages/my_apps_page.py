@@ -15,6 +15,7 @@ from PyQt5.QtWidgets import (QAction, QApplication, QDialog, QFileIconProvider,
 
 # Local Module Imports
 from core.services.path_manager import PathManager
+from core.services.edit_app_dialog import AppEditDialog
 from core.utils import get_folder_size_gb, is_update_available
 from locales.localization import _
 from locales.ui_localizer import localize_myapps_page
@@ -704,7 +705,6 @@ class MyAppsController:
 
     def open_edit_dialog(self, app):
         """Opens the repair/edit dialog for the selected application."""
-        from core.services.edit_app_dialog import AppEditDialog
 
         # Map keys to dialog expected format
         app_data_for_dialog = {
