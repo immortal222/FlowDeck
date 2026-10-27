@@ -154,7 +154,13 @@ class AppEditDialog(QDialog):
         if new_exe_display_text == os.path.basename(self._initial_exe_path_full):
             new_exe = self._initial_exe_path_full
         else:
-            new_exe = new_exe_display_text
+            # Construct full absolute path if a new relative executable path was chosen
+            local_path = self.app_data.get('local_path', '')
+            if local_path and not os.path.isabs(new_exe_display_text):
+                new_exe = os.path.normpath(os.path.join(
+                    local_path, new_exe_display_text)).replace("\\", "/")
+            else:
+                new_exe = new_exe_display_text.replace("\\", "/")
 
         if not new_name or not new_exe:
             return

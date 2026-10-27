@@ -139,8 +139,21 @@ class PortableScanner:
             guessed_name = guessed_name or extracted_name
             guessed_version = guessed_version or extracted_version
 
+        # Ensure guessed_name is a single string before normalizing
+        if isinstance(guessed_name, (list, tuple)):
+            guessed_name = guessed_name[0] if guessed_name else ""
+
+        normalized_candidates = get_normalized_app_name(guessed_name)
+
+        # Extract only the primary candidate string from the returned list
+        if isinstance(normalized_candidates, (list, tuple)):
+            final_name = normalized_candidates[0] if normalized_candidates else str(
+                guessed_name)
+        else:
+            final_name = str(normalized_candidates or guessed_name)
+
         return {
-            "name": get_normalized_app_name(guessed_name),
+            "name": final_name,
             "version": guessed_version,
             "exe_path": str(Path(exe_path).resolve()).replace("\\", "/"),
             "is_paf": is_paf,
