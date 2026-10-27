@@ -40,6 +40,19 @@ class ScanConfirmDialog(QDialog):
             _("set_scan_confirm_title", "New Application Detected"))
         self.setMinimumWidth(400)
 
+        # Clean parameters from list objects, quotes, and square brackets
+        if isinstance(folder_name, (list, tuple)):
+            folder_name = folder_name[0] if folder_name else ""
+        folder_name = str(folder_name or "").strip().strip("[]'\"")
+
+        if isinstance(detected_name, (list, tuple)):
+            detected_name = detected_name[0] if detected_name else ""
+        detected_name = str(detected_name or "").strip().strip("[]'\"")
+
+        if isinstance(detected_version, (list, tuple)):
+            detected_version = detected_version[0] if detected_version else ""
+        detected_version = str(detected_version or "").strip().strip("[]'\"")
+
         theme = parent.settings_controller.config.get("theme", "Modern Dark") if hasattr(
             parent, 'settings_controller') else "Modern Dark"
         style = DIALOG_LIGHT_STYLE if theme == "Modern Light" else DIALOG_STYLE

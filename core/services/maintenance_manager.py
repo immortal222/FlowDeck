@@ -63,6 +63,14 @@ class MaintenanceManager:
 
             final_name = metadata["name"]
             final_version = metadata["version"]
+            # Ensure name and version are clean strings without list brackets
+            if isinstance(final_name, (list, tuple)):
+                final_name = final_name[0] if final_name else ""
+            final_name = str(final_name or "").strip().strip("[]'\"")
+
+            if isinstance(final_version, (list, tuple)):
+                final_version = final_version[0] if final_version else ""
+            final_version = str(final_version or "").strip().strip("[]'\"")
             actual_dir_path = entry_path_str
             actual_exe_path = metadata["exe_path"]
             is_paf = metadata.get("is_paf", False)
