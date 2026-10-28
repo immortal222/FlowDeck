@@ -112,16 +112,8 @@ class AppMainWindow(QMainWindow):
         # 11. Update Manager Initialization
         self.update_manager = UpdateManager(self, self.db)
 
-        # self.update_manager.automatic_check_on_startup(
-        #     self.settings_controller.config,
-        #     self.settings_controller
-        # )
-
         # 12. Check for GitHub updates if enabled
         self.check_for_github_updates()
-
-        # 13. Check if we just updated and show message / log activity
-        self.check_post_update_flag()
 
     def setup_tray_icon(self):
         self.tray_icon = QSystemTrayIcon(self)

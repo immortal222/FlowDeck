@@ -87,6 +87,9 @@ if __name__ == "__main__":
     if pyi_splash and pyi_splash.is_alive():
         pyi_splash.close()
 
+    # Check post-update status after splash screen is closed and main window is visible
+    window.check_post_update_flag()
+
     # 4. --- HANDLE APP "WAKE UP" ---
     def bring_to_front():
         logger.info("Received signal: Bringing window to front!")
