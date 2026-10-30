@@ -5,7 +5,7 @@ import sys
 
 # Third-Party Library Imports
 from PyQt5 import QtGui, QtWidgets
-from PyQt5.QtCore import Qt, QUrl
+from PyQt5.QtCore import Qt, QTimer, QUrl
 from PyQt5.QtGui import QDesktopServices
 from PyQt5.QtWidgets import (QAction, QMainWindow, QMenu, QMessageBox,
                              QProgressDialog, QSystemTrayIcon)
@@ -112,8 +112,8 @@ class AppMainWindow(QMainWindow):
         # 11. Update Manager Initialization
         self.update_manager = UpdateManager(self, self.db)
 
-        # 12. Check for GitHub updates if enabled
-        self.check_for_github_updates()
+        # 12. Check for GitHub updates if enabled (deferred until window is shown)
+        QTimer.singleShot(1500, self.check_for_github_updates)
 
     def setup_tray_icon(self):
         self.tray_icon = QSystemTrayIcon(self)

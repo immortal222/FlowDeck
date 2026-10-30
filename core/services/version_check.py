@@ -4,7 +4,7 @@ import logging
 # Third-Party Library Imports
 from packaging.version import parse as parse_version
 from PyQt5.QtCore import QThread, pyqtSignal
-import requests
+
 
 # Local Application Imports
 from locales.localization import _
@@ -21,6 +21,8 @@ def check_github_updates(username="immortal222", repo="FlowDeck", current_versio
     :param repo: str - Name of the repository
     :param current_version: str - Current application version
     """
+    import requests  # Staying here for fast startup, as requests is only used in this method
+
     # For local testing via XAMPP, targeting local mock API JSON endpoint
     # url = "http://localhost/mock_release.json"
     # Production endpoint alternative:

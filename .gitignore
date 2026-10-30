@@ -31,3 +31,4 @@ logs/flowdeck_debug_trace.log
 logs/flowdeck_errors.log
 Versions/
 sync.ffs_db
+upx.exe.bak

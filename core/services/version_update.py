@@ -9,7 +9,6 @@ import time
 import zipfile
 
 # Third-Party Library Imports
-import requests
 from PyQt5.QtCore import QThread, pyqtSignal
 
 # Local Module Imports
@@ -44,6 +43,8 @@ class UpdateDownloaderWorker(QThread):
         self.is_cancelled = True
 
     def run(self):
+        import requests  # Staying here for fast startup, as requests is only used in this method
+
         temp_dir = tempfile.gettempdir()
         zip_path = os.path.join(temp_dir, "flowdeck_update.zip")
         base_extract_dir = os.path.join(temp_dir, "flowdeck_extracted")

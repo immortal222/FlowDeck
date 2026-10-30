@@ -5,7 +5,7 @@ import sqlite3
 from urllib.parse import quote_plus
 
 # Third-Party Library Imports
-import requests
+
 
 # Local Module Imports
 from core.services.path_manager import PathManager
@@ -32,6 +32,8 @@ class ScoopAPI:
         Accepts either a string or a list of candidate names.
         Returns metadata dictionary or None.
         """
+        import requests  # Staying here for fast startup, as requests is only used in this method
+
         # Normalize input parameter into a candidates list at the very beginning
         if isinstance(app_name, list):
             candidates = [c for c in app_name if c]

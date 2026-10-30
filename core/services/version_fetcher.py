@@ -1,5 +1,5 @@
 import logging
-import requests
+
 
 from core.api.scoop_api import ScoopAPI
 from core.api.chocolatey_api import ChocolateyAPI
@@ -19,6 +19,7 @@ class VersionMetadataFetcher:
         self.choco = ChocolateyAPI()
 
     def fetch(self, name, source="manual", url=""):
+        import requests  # Staying here for fast startup, as requests is only used in this method
         try:
             # GitHub Releases
             if source == "github" and url:

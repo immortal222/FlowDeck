@@ -1,7 +1,6 @@
 import logging
 import re
 
-import requests
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +13,8 @@ class ChocolateyAPI:
 
     def search_app(self, app_name):
         """Searches for an application in Chocolatey's gallery, favoring portable versions."""
+        import requests  # Staying here for fast startup, as requests is only used in this method
+
         clean_name = app_name.lower().strip().replace("+", "plus").replace(" ", "")
 
         # Try both common Chocolatey portable naming conventions

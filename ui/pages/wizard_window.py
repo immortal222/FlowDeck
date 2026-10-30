@@ -13,7 +13,6 @@ from difflib import SequenceMatcher
 from urllib.parse import quote_plus
 
 # Third-Party Library Imports
-import requests
 import win32com.client
 from PyQt5.QtCore import QEvent, QObject, QSize, Qt
 from PyQt5.QtGui import QIcon
@@ -1156,6 +1155,8 @@ class WizardController(QObject):
 
     def start_quick_install(self, scoop_name):
         """Automated download and installation from Scoop or Chocolatey APIs."""
+        import requests  # Staying here for fast startup, as requests is only used in this method
+
         if self._is_installing:
             self.log(_("wiz_log_already_running",
                      "⏳ An installation is already in progress. Please wait."))
