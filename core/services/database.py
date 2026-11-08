@@ -238,6 +238,20 @@ class DatabaseManager:
                 f"Error updating latest version for {name}: {e}")
             return False
 
+    def update_current_version(self, name, current_version):
+        """Updates the local installed version for an application."""
+        query = "UPDATE apps SET current_version = ? WHERE name = ?"
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(query, (current_version, name))
+                conn.commit()
+                return True
+        except Exception as e:
+            logger.error(
+                f"Error updating current version for {name}: {e}")
+            return False
+
     def toggle_favorite(self, app_id, status):
         """Toggles the favorite status of an application. Adds the column if it doesn't exist."""
         try:

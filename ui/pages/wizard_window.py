@@ -27,7 +27,7 @@ from core.services.installer import AppInstaller
 from core.services.path_manager import PathManager
 from core.utils import (get_normalized_app_name, get_pe_name, get_pe_version,
                         get_portable_apps_metadata, is_internet_available,
-                        scan_ini_files)
+                        resolve_paf_metadata, scan_ini_files)
 from locales.localization import _
 from locales.ui_localizer import localize_wizard_page
 from ui.styles.styles import DIALOG_LIGHT_STYLE, DIALOG_STYLE
@@ -838,19 +838,13 @@ class WizardController(QObject):
             self.log("⚠️ No application folder detected after installation.")
             return
 
-        # 3. Read metadata directly from the identified target folder
-        metadata = get_portable_apps_metadata(target_folder)
+        # 3. Read metadata directly from the identified target folder using PAF metadata resolver
+        metadata = resolve_paf_metadata(target_folder)
 
         if metadata:
             app_name = metadata.get('name', 'Unknown')
             app_version = metadata.get('version', '1.0')
-            start_exe_rel = metadata.get('start_exe')
-
-            final_exe_path = None
-            if start_exe_rel:
-                potential_exe = os.path.join(target_folder, start_exe_rel)
-                if os.path.exists(potential_exe):
-                    final_exe_path = os.path.abspath(potential_exe)
+            final_exe_path = metadata.get('exe_path')
 
             if not final_exe_path:
                 for f in os.listdir(target_folder):
@@ -861,8 +855,6 @@ class WizardController(QObject):
 
             self.ui.appNameInput.setText(app_name)
             self.detected_version_regex = app_version
-            self.ui.installButton.setProperty("final_version", app_version)
-            self.ui.installButton.setProperty("paf_exe_path", final_exe_path)
 
             self.log(f"✨ Metadata: {app_name} v{app_version}")
 

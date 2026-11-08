@@ -152,6 +152,107 @@ def get_portable_apps_metadata(app_folder):
     return None
 
 
+def resolve_paf_metadata(app_folder):
+    """
+    Resolves actual version and launcher executable path for PortableApps (PAF).
+    The returned 'exe_path' always points to the main root launcher (start_exe).
+    Internal executables/INIs are inspected purely for accurate version determination.
+    """
+    if not app_folder or not os.path.exists(app_folder):
+        return None
+
+    base_meta = get_portable_apps_metadata(app_folder) or {}
+    name = base_meta.get('name') or os.path.basename(app_folder)
+    start_exe = base_meta.get('start_exe')
+
+    # Root launcher executable path (MUST NOT be overwritten by inner executables)
+    launcher_exe_path = (
+        os.path.abspath(os.path.join(app_folder, start_exe))
+        if start_exe
+        else None
+    )
+
+    resolved_version = None
+    app_dir = os.path.join(app_folder, "App")
+    appinfo_dir = os.path.join(app_dir, "AppInfo")
+
+    # 1. Level 1: Check Launcher INI configuration (App/AppInfo/Launcher/*.ini)
+    launcher_dir = os.path.join(appinfo_dir, "Launcher")
+    if os.path.exists(launcher_dir):
+        for file in os.listdir(launcher_dir):
+            if file.lower().endswith('.ini'):
+                ini_path = os.path.join(launcher_dir, file)
+                try:
+                    config = configparser.ConfigParser()
+                    config.read(ini_path, encoding='utf-8-sig')
+                    if config.has_section('Launch'):
+                        # Check 64-bit executable first, then 32-bit fallback
+                        exe_rel = config.get(
+                            'Launch', 'ProgramExecutable64', fallback=None
+                        )
+                        if not exe_rel or not os.path.exists(
+                            os.path.join(app_dir, exe_rel)
+                        ):
+                            exe_rel = config.get(
+                                'Launch', 'ProgramExecutable', fallback=None
+                            )
+
+                        if exe_rel:
+                            inner_exe = os.path.abspath(
+                                os.path.join(app_dir, exe_rel)
+                            )
+                            if os.path.isfile(inner_exe):
+                                resolved_version = get_pe_version(inner_exe)
+                except Exception as e:
+                    logger.error(
+                        f"Error parsing launcher ini {ini_path}: {e}"
+                    )
+            if resolved_version:
+                break
+
+    # 2. Level 2: Check Mozilla application.ini (e.g., Firefox, Thunderbird)
+    if not resolved_version and os.path.exists(app_dir):
+        for root, dirs, files in os.walk(app_dir):
+            if "application.ini" in files:
+                app_ini = os.path.join(root, "application.ini")
+                try:
+                    config = configparser.ConfigParser()
+                    config.read(app_ini, encoding='utf-8-sig')
+                    if config.has_section('App'):
+                        moz_ver = config.get('App', 'Version', fallback=None)
+                        if moz_ver:
+                            resolved_version = moz_ver
+                            break
+                except Exception as e:
+                    logger.error(
+                        f"Error parsing application.ini {app_ini}: {e}"
+                    )
+
+    # 3. Level 3: Fallback to DisplayVersion from appinfo.ini
+    if not resolved_version:
+        resolved_version = base_meta.get('version')
+
+    # Fallback launcher detection if start_exe wasn't specified in appinfo.ini
+    if not launcher_exe_path:
+        for candidate in [app_folder, app_dir]:
+            if os.path.isdir(candidate):
+                for f in os.listdir(candidate):
+                    if f.lower().endswith(".exe"):
+                        launcher_exe_path = os.path.abspath(
+                            os.path.join(candidate, f)
+                        )
+                        break
+            if launcher_exe_path:
+                break
+
+    return {
+        'name': name,
+        'version': resolved_version,
+        'exe_path': launcher_exe_path,
+        'start_exe': start_exe,
+    }
+
+
 def scan_ini_files(root_folder):
     """
     Scans a PortableApps root for appinfo.ini files and returns a list of found metadata.
@@ -172,19 +273,17 @@ def scan_ini_files(root_folder):
 
 def update_all_ini_files(root_folder, db):
     """
-    Updates the database using the metadata 
-    found in all appinfo.ini files.
+    Updates the database using resolved PAF metadata.
     Returns a list of updated app records.
     """
-
-    ini_files = []
     ini_files = scan_ini_files(root_folder)
 
     updated_apps = []
     for ini_path in sorted(ini_files):
         app_folder = os.path.dirname(
-            os.path.dirname(os.path.dirname(ini_path)))
-        metadata = get_portable_apps_metadata(app_folder)
+            os.path.dirname(os.path.dirname(ini_path))
+        )
+        metadata = resolve_paf_metadata(app_folder)
         if not metadata:
             continue
 
@@ -193,28 +292,7 @@ def update_all_ini_files(root_folder, db):
             continue
 
         version = metadata.get("version") or "1.0"
-        start_exe = metadata.get("start_exe")
-        exe_path = None
-
-        if start_exe:
-            relative_exe_path = os.path.join(app_folder, start_exe)
-            exe_path = os.path.abspath(relative_exe_path)
-        else:
-            for candidate in [os.path.join(app_folder, "App"), app_folder]:
-                if os.path.isdir(candidate):
-                    for root, _, files in os.walk(candidate):
-                        for filename in files:
-                            if filename.lower().endswith(".exe"):
-                                exe_path = os.path.abspath(
-                                    os.path.join(root, filename))
-                                break
-                        if exe_path:
-                            break
-                if exe_path:
-                    break
-
-        if not exe_path:
-            exe_path = os.path.abspath(app_folder)
+        exe_path = metadata.get("exe_path")
 
         if db and hasattr(db, "add_or_update_app"):
             db.add_or_update_app(
@@ -229,7 +307,7 @@ def update_all_ini_files(root_folder, db):
             "name": app_name,
             "folder": PathManager.to_absolute_path(app_folder),
             "version": version,
-            "start_exe": start_exe,
+            "start_exe": metadata.get("start_exe"),
             "exe_path": PathManager.to_absolute_path(exe_path),
         })
     return updated_apps
