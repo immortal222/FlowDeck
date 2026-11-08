@@ -26,7 +26,7 @@ from core.api.scoop_api import ScoopAPI
 from core.services.installer import AppInstaller
 from core.services.path_manager import PathManager
 from core.utils import (get_normalized_app_name, get_pe_name, get_pe_version,
-                        get_portable_apps_metadata, is_internet_available,
+                        get_portable_apps_metadata, is_app_running, is_internet_available,
                         resolve_paf_metadata, scan_ini_files)
 from locales.localization import _
 from locales.ui_localizer import localize_wizard_page
@@ -1047,6 +1047,13 @@ class WizardController(QObject):
 
             if os.path.abspath(extracted_folder) != os.path.abspath(final_target):
                 if os.path.exists(final_target):
+                    # Check if any executable in the target folder is currently running
+                    if not self._check_and_prompt_running_app(final_target):
+                        self.log(_("wiz_log_install_cancelled",
+                                 "Installation cancelled by user."))
+                        shutil.rmtree(extracted_folder, ignore_errors=True)
+                        return
+
                     shutil.rmtree(final_target, ignore_errors=True)
                 os.rename(extracted_folder, final_target)
             else:
@@ -1552,3 +1559,32 @@ class WizardController(QObject):
                 logger.error(f"Post-install cleanup error: {e}")
 
             self._is_installing = False
+
+    def _check_and_prompt_running_app(self, target_folder):
+        """Checks if the target app is running and prompts user to save work and close it."""
+        while is_app_running(target_folder):
+            msg = QMessageBox(self.main_window)
+            msg.setWindowTitle(
+                _("wiz_app_running_title", "Application Running"))
+            msg.setIcon(QMessageBox.Warning)
+            msg.setStyleSheet(self.get_msg_style())
+            msg.setText(
+                _("wiz_app_running_msg",
+                  "The application is currently running.\n\nPlease save your work and close the application to proceed with the installation.")
+            )
+
+            btn_retry = msg.addButton(
+                _("wiz_btn_retry", "Retry"), QMessageBox.AcceptRole
+            )
+            btn_retry.setObjectName("primaryButton")
+            btn_cancel = msg.addButton(
+                _("wiz_btn_cancel", "Cancel"), QMessageBox.RejectRole
+            )
+            msg.setDefaultButton(btn_retry)
+
+            msg.exec_()
+
+            if msg.clickedButton() != btn_retry:
+                return False
+
+        return True

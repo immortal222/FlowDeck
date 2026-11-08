@@ -5,6 +5,7 @@ import os
 import re
 import shutil
 import socket
+import subprocess
 
 # Third-Party Library Imports
 import pefile
@@ -506,3 +507,49 @@ def get_pe_name(file_path):
         return re.sub(r'(?i)\.exe$', '', original_fn).strip()
 
     return None
+
+
+def is_app_running(folder_path):
+    """Checks if any executable (.exe) inside the target folder is currently running on Windows."""
+    if not folder_path or not os.path.exists(folder_path):
+        return False
+
+    # Collect all .exe file names in the target directory
+    exe_names = set()
+    for root, _, files in os.walk(folder_path):
+        for file in files:
+            if file.lower().endswith(".exe"):
+                exe_names.add(file.lower())
+
+    if not exe_names:
+        return False
+
+    try:
+        # Hide standard console window during process execution on Windows
+        startupinfo = None
+        if os.name == 'nt':
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+
+        # Query running Windows processes
+        result = subprocess.run(
+            ["tasklist", "/FO", "CSV", "/NH"],
+            capture_output=True,
+            text=True,
+            startupinfo=startupinfo,
+            check=True
+        )
+
+        output_lower = result.stdout.lower()
+
+        # Match running executables against target folder executables
+        for exe_name in exe_names:
+            if f'"{exe_name}"' in output_lower:
+                logger.info(f"Detected running process: {exe_name}")
+                return True
+
+    except Exception as e:
+        logger.error(
+            f"Error checking running processes for {folder_path}: {e}")
+
+    return False
