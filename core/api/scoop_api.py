@@ -53,53 +53,99 @@ class ScoopAPI:
         app_name_lower = app_name_lower.replace("+", "plus").replace(" ", "-")
 
         # Phase A: Online Bucket Lookup via GitHub
-        for bucket_name, url_template in self.buckets.items():
-            url = url_template.format(app_name_lower)
-            try:
-                response = requests.get(url, timeout=5)
-                if response.status_code == 200:
-                    data = response.json()
-                    logger.info(
-                        f"Found {primary_name} in bucket '{bucket_name}'.")
+        slugs = []
+        base_name = candidates[0].lower().strip().replace("+", "plus")
 
-                    # Determine homepage URL or fallback to Google Search link
-                    homepage = data.get("homepage", "")
-                    if isinstance(homepage, list) and homepage:
-                        homepage = homepage[0]
-                    if not homepage:
-                        homepage = f"https://www.google.com/search?q={quote_plus(primary_name)}"
+        # 1. Standard slug (replace spaces and underscores with hyphens)
+        slugs.append(base_name.replace(" ", "-").replace("_", "-"))
 
-                    return {
-                        "name": data.get("name", primary_name),
-                        "version": data.get("version", "1.0"),
-                        "description": data.get("description", ""),
-                        "url": data.get("url"),
-                        "source": "scoop",
-                        "bucket": bucket_name,
-                        "homepage": homepage,
-                        "architecture": data.get("architecture"),
-                        "bin": data.get("bin")
-                    }
-            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
-                logger.error(
-                    f"Server is down or unreachable for Scoop ({primary_name}): {e}")
-                return "SERVER_ERROR"
-            except requests.RequestException as e:
-                logger.error(
-                    f"Network error while searching for {primary_name}: {e}")
+        # 2. Clean slug (remove hyphens, underscores, and spaces)
+        slugs.append(base_name.replace(
+            "-", "").replace("_", "").replace(" ", ""))
+
+        # 3. Strip common noise words
+        noise_words = [
+            "portable", "community", "edition", "desktop",
+            "free", "installer", "setup", "win32", "win64", "x64", "x86"
+        ]
+        clean_words_str = base_name
+        for word in noise_words:
+            clean_words_str = clean_words_str.replace(word, "")
+
+        clean_words_str = clean_words_str.strip("-_ ")
+        if clean_words_str:
+            slugs.append(clean_words_str.replace(" ", "-").replace("_", "-"))
+            slugs.append(clean_words_str.replace(
+                "-", "").replace("_", "").replace(" ", ""))
+
+        print(slugs)
+
+        # Deduplicate while preserving order
+        unique_slugs = []
+        for s in slugs:
+            if s and s not in unique_slugs:
+                unique_slugs.append(s)
+
+        for slug in unique_slugs:
+            for bucket_name, url_template in self.buckets.items():
+                url = url_template.format(slug)
+                try:
+                    response = requests.get(url, timeout=5)
+                    if response.status_code == 200:
+                        data = response.json()
+                        logger.info(
+                            f"Found {primary_name} (slug: '{slug}') in bucket '{bucket_name}'."
+                        )
+
+                        # Determine homepage URL or fallback to Google Search link
+                        homepage = data.get("homepage", "")
+                        if isinstance(homepage, list) and homepage:
+                            homepage = homepage[0]
+                        if not homepage:
+                            homepage = f"https://www.google.com/search?q={quote_plus(primary_name)}"
+
+                        return {
+                            "name": data.get("name", primary_name),
+                            "version": data.get("version", "1.0"),
+                            "description": data.get("description", ""),
+                            "url": data.get("url"),
+                            "source": "scoop",
+                            "bucket": bucket_name,
+                            "homepage": homepage,
+                            "architecture": data.get("architecture"),
+                            "bin": data.get("bin")
+                        }
+                except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+                    logger.error(
+                        f"Server is down or unreachable for Scoop ({primary_name} / {slug}): {e}"
+                    )
+                    return "SERVER_ERROR"
+                except requests.RequestException as e:
+                    logger.error(
+                        f"Network error while searching for {primary_name} ({slug}): {e}"
+                    )
 
         # Phase B: Local catalog database lookup (multi-stage fallback)
-        print(f"\n--- [SCOOP DEBUG] ---")
-        print(f"--> Incoming Candidates: {candidates}")
+        # Combine original candidates with unique_slugs from Phase A
+        db_search_terms = []
+        for cand in candidates:
+            if cand and cand not in db_search_terms:
+                db_search_terms.append(cand)
+        for slug in unique_slugs:
+            if slug and slug not in db_search_terms:
+                db_search_terms.append(slug)
 
-        if os.path.exists(self.catalog_db) and candidates:
+        print(f"\n--- [SCOOP DEBUG] ---")
+        print(f"--> Incoming DB Candidates: {db_search_terms}")
+
+        if os.path.exists(self.catalog_db) and db_search_terms:
             try:
                 conn = sqlite3.connect(self.catalog_db)
                 cursor = conn.cursor()
                 result = None
 
-                # Stage 1: Exact query matching for each candidate
-                for cand in candidates:
+                # Stage 1: Exact query matching for each search term across user_friendly_name and scoop_id
+                for cand in db_search_terms:
                     search_term = cand.strip()
                     cursor.execute("""
                         SELECT scoop_id, bucket FROM apps 
@@ -113,9 +159,9 @@ class ScoopAPI:
                             f"--> DB Match found at Stage 1 for term '{search_term}': {result}")
                         break
 
-                # Stage 2: Fallback prefix search using the root candidate
+                # Stage 2: Fallback prefix search using the primary candidate name
                 if not result and len(candidates) > 0:
-                    root_term = candidates[-1].strip() + "%"
+                    root_term = candidates[0].strip() + "%"
                     print(
                         f"--> Attempting Stage 2 prefix search with: '{root_term}'")
                     cursor.execute("""
