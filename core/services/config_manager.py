@@ -10,7 +10,6 @@ logger = logging.getLogger(__name__)
 class ConfigManager:
     DEFAULT_CONFIG = {
         "install_path": "Apps",
-        "start_on_boot": False,
         "minimize_to_tray": False,
         "language": "English",
         "theme": "Modern Dark",
@@ -36,6 +35,7 @@ class ConfigManager:
                 stored_config = json.load(f)
 
             if isinstance(stored_config, dict):
+                stored_config.pop("start_on_boot", None)  # legacy key
                 self.data = {**self.DEFAULT_CONFIG, **stored_config}
             else:
                 logger.warning(

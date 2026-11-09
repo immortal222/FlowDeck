@@ -14,6 +14,7 @@ except ImportError:
 # Local Module Imports
 from core.logging_config import setup_logging
 from core.services.config_manager import ConfigManager
+from core.services.legacy_cleanup import remove_legacy_startup_entry
 from core.services.path_manager import PathManager
 from core.services.single_instance import SingleInstance
 from locales.localization import _manager
@@ -64,6 +65,9 @@ if __name__ == "__main__":
 
     # Clean up leftover updater.exe if present
     _cleanup_leftover_updater()
+
+    # Remove autostart entry left by older versions
+    remove_legacy_startup_entry()
 
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
