@@ -35,6 +35,10 @@ TRANSLATIONS = {
         "about_license_label": "Άδεια χρήσης",
         "about_license_value": "GNU GPLv3",
         "about_github": "GitHub",
+        "about_privacy_title": "Απόρρητο & Δεδομένα",
+        "about_privacy_local": "Οι ρυθμίσεις και η λίστα εφαρμογών σου αποθηκεύονται στον δικό του φάκελο του FlowDeck στον υπολογιστή σου.",
+        "about_privacy_network": "Οι έλεγχοι ενημερώσεων επικοινωνούν με το GitHub, τα repositories του Scoop (που φιλοξενούνται στο GitHub) και το Chocolatey, και περιλαμβάνουν τα ονόματα των εφαρμογών που παρακολουθείς. Γίνεται επίσης δοκιμή σύνδεσης στο Google Public DNS (8.8.8.8). Καμία ανάλυση χρήσης ή τηλεμετρία.",
+        "about_privacy_update": "Οι αυτόματες ενημερώσεις κατεβαίνουν από το GitHub στον προσωρινό φάκελο των Windows, εφαρμόζονται στον φάκελο της εφαρμογής και μετά τα προσωρινά αρχεία αφαιρούνται.",
         "no_updates_title": "Ενημέρωση",
         "no_updates_text": "Έχετε ήδη την τελευταία έκδοση της εφαρμογής!",
 
@@ -515,6 +519,10 @@ TRANSLATIONS = {
         "about_license_label": "License",
         "about_license_value": "GNU GPLv3",
         "about_github": "GitHub",
+        "about_privacy_title": "Privacy & Data",
+        "about_privacy_local": "Settings and your apps list are stored in FlowDeck's own folder on your computer.",
+        "about_privacy_network": "Update checks contact GitHub, Scoop's repositories (hosted on GitHub) and Chocolatey, and include the names of the apps you track. A connection test also reaches Google Public DNS (8.8.8.8). No analytics or telemetry. ",
+        "about_privacy_update": "Self-updates are downloaded from GitHub into your Windows temporary folder, applied to the app folder, and the temporary files are then removed.",
         "no_updates_title": "No Updates Available",
         "no_updates_text": "Your system is up to date. No updates are available at this time.",
 

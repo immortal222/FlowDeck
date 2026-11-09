@@ -492,6 +492,13 @@ class AppMainWindow(QMainWindow):
         about_license_lbl = _("about_license_label", "License")
         about_license_val = _("about_license_value", "GNU GPLv3")
         about_github = _("about_github", "GitHub")
+        about_priv_title = _("about_privacy_title", "Privacy & Data")
+        about_priv_local = _("about_privacy_local",
+                             "Settings and your apps list are stored in FlowDeck's own folder on your computer.")
+        about_priv_net = _("about_privacy_network",
+                           "Update checks contact GitHub, Scoop's repositories (hosted on GitHub) and Chocolatey, and include the names of the apps you track. A connection test also reaches Google Public DNS (8.8.8.8). No analytics or telemetry.")
+        about_priv_upd = _("about_privacy_update",
+                           "Self-updates are downloaded from GitHub into your Windows temporary folder, applied to the app folder, and the temporary files are then removed.")
 
         msg = QMessageBox(self)
         msg.setWindowTitle(about_title)
@@ -515,6 +522,13 @@ class AppMainWindow(QMainWindow):
             f"• {about_scoop}<br>"
             f"• {about_choco}<br>"
             f"• {about_7z}"
+            f"</p>"
+            f"<hr>"
+            f"<p style='font-size: 11px; line-height: 1.5; color: #a0a0a0;'>"
+            f"<b>{about_priv_title}</b><br>"
+            f"• {about_priv_local}<br>"
+            f"• {about_priv_net}<br>"
+            f"• {about_priv_upd}"
             f"</p>"
             f"<hr>"
             f"<p><b>{about_github}:</b> <a href='{github_url}' style='color: #2371C4;'>{github_url}</a></p>"
