@@ -67,6 +67,7 @@ if __name__ == "__main__":
     _cleanup_leftover_updater()
 
     # Remove autostart entry left by older versions
+    # TODO: remove legacy startup cleanup after v1.6 (added in 1.3.2)
     remove_legacy_startup_entry()
 
     app = QApplication(sys.argv)
