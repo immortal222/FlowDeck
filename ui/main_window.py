@@ -492,6 +492,8 @@ class AppMainWindow(QMainWindow):
                        "Portable application manager for Windows.")
         about_7z = _("about_7zip_mention",
                      "Includes 7-Zip (7za.exe) for archive management.")
+        about_qt = _("about_qt_mention",
+                     "Built with Python and Qt (PyQt5), licensed under GPLv3.")
         about_scoop = _("about_scoop_mention",
                         "Powered by the Scoop ecosystem for portable apps.")
         about_choco = _("about_chocolatey_mention",
@@ -530,7 +532,8 @@ class AppMainWindow(QMainWindow):
             f"<p style='font-size: 11px; line-height: 1.5; color: #a0a0a0;'>"
             f"• {about_scoop}<br>"
             f"• {about_choco}<br>"
-            f"• {about_7z}"
+            f"• {about_7z}<br>"
+            f"• {about_qt}"
             f"</p>"
             f"<hr>"
             f"<p style='font-size: 11px; line-height: 1.5; color: #a0a0a0;'>"
