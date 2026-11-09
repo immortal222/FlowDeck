@@ -1023,7 +1023,7 @@ QComboBox#combo_languageSelect:hover {
     border: 1px solid #2B9099;
 }
 
-QCheckBox#chk_startOnBoot,
+
 QCheckBox#chk_minimizeToTray,
 QCheckBox#chk_updateToStart,
 QCheckBox#chk_enableSilentUpdater {
@@ -1952,7 +1952,6 @@ QComboBox#combo_languageSelect:hover {
     border: 1px solid #2B9099;
 }
 
-QCheckBox#chk_startOnBoot,
 QCheckBox#chk_minimizeToTray,
 QCheckBox#chk_updateToStart,
 QCheckBox#chk_enableSilentUpdater {

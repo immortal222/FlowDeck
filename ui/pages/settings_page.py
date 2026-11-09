@@ -4,8 +4,6 @@ import os
 import shutil
 import stat
 import subprocess
-import sys
-import winreg
 
 # Third-Party Imports
 from PyQt5.QtCore import Qt
@@ -270,9 +268,7 @@ class SettingsController:
         if hasattr(self.ui, 'btn_browsePath'):
             self.ui.btn_browsePath.setEnabled(not is_usb)
 
-        if hasattr(self.ui, 'chk_startOnBoot'):
-            self.ui.chk_startOnBoot.setChecked(
-                self.config.get("start_on_boot", False))
+        
 
         if hasattr(self.ui, 'chk_minimizeToTray'):
             self.ui.chk_minimizeToTray.setChecked(
@@ -361,8 +357,7 @@ class SettingsController:
     def save_settings(self):
         """Synchronizes UI state to configuration file and applies changes globally."""
         new_path = self.ui.txt_installPath.text().strip()
-        self.config["install_path"] = new_path
-        self.config["start_on_boot"] = self.ui.chk_startOnBoot.isChecked()
+        self.config["install_path"] = new_path        
         self.config["minimize_to_tray"] = self.ui.chk_minimizeToTray.isChecked()
         self.config["update_to_start"] = self.ui.chk_updateToStart.isChecked()
         if hasattr(self.ui, 'chk_enableSilentUpdater'):
@@ -377,8 +372,6 @@ class SettingsController:
 
             # Refresh UI controls to reflect saved state
             self.populate_ui()
-
-            self.apply_start_on_boot(self.config.get("start_on_boot", False))
 
             from ui.main_window import apply_global_theme
             apply_global_theme(self.config["theme"])
@@ -444,38 +437,6 @@ class SettingsController:
             err_box.setText(f"Failed to clear activity history:\n{e}")
             err_box.setStyleSheet(self.get_msg_style())
             err_box.exec()
-
-    def apply_start_on_boot(self, enable):
-        """Configures Windows registry for automatic startup."""
-        if sys.platform != "win32":
-            return
-
-        key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
-        app_name = "FlowDeck"
-
-        if getattr(sys, 'frozen', False):
-            app_path = f'"{sys.executable}"'
-        else:
-            app_path = f'"{sys.executable}" "{os.path.abspath(sys.argv[0])}"'
-
-        try:
-            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
-                                 key_path, 0, winreg.KEY_SET_VALUE)
-
-            if enable:
-                winreg.SetValueEx(key, app_name, 0, winreg.REG_SZ, app_path)
-                logger.info("FlowDeck added to startup.")
-            else:
-                try:
-                    winreg.DeleteValue(key, app_name)
-                    logger.info("FlowDeck removed from startup.")
-                except FileNotFoundError:
-                    pass
-
-            winreg.CloseKey(key)
-        except Exception as e:
-            logger.error(
-                f"Error configuring startup registry key: {e}")
 
     def manual_update_check(self):
         """Triggers a manual update check with UI feedback."""
@@ -696,9 +657,6 @@ class SettingsController:
             # Apply default theme (Modern Dark) globally
             from ui.main_window import apply_global_theme
             apply_global_theme(self.config["theme"])
-
-            # Configure registry boot setting to False
-            self.apply_start_on_boot(False)
 
             # Re-populate current settings page elements (checkboxes, dropdowns)
             self.populate_ui()

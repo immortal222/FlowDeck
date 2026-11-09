@@ -101,9 +101,6 @@ def localize_settings_page(window):
     if hasattr(ui, 'group_systemOptions'):
         ui.group_systemOptions.setTitle(
             _("set_ui_group_system_options", "SYSTEM OPTIONS"))
-    if hasattr(ui, 'chk_startOnBoot'):
-        ui.chk_startOnBoot.setText(
-            _("set_ui_chk_start_on_boot", "Start on Windows Boot"))
     if hasattr(ui, 'chk_minimizeToTray'):
         ui.chk_minimizeToTray.setText(
             _("set_ui_chk_minimize_to_tray", "Minimize to System Tray on close"))

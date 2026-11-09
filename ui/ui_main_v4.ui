@@ -2039,13 +2039,6 @@
                 </property>
                 <layout class="QVBoxLayout" name="verticalLayout_32">
                  <item>
-                  <widget class="QCheckBox" name="chk_startOnBoot">
-                   <property name="text">
-                    <string>Εκκίνηση με τα Windows</string>
-                   </property>
-                  </widget>
-                 </item>
-                 <item>
                   <widget class="QCheckBox" name="chk_minimizeToTray">
                    <property name="text">
                     <string>Ελαχιστοποίηση στο System Tray κατά το κλείσιμο</string>
