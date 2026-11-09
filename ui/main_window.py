@@ -1,7 +1,9 @@
 # Standard Library Imports
 import logging
 import os
+import shutil
 import sys
+import tempfile
 
 # Third-Party Library Imports
 from PyQt5 import QtGui, QtWidgets
@@ -477,6 +479,12 @@ class AppMainWindow(QMainWindow):
                 except Exception as e:
                     logger.error(f"Failed to delete update_flag.json: {e}")
 
+            # Remove the extracted update package left in the temp folder
+            extracted_dir = os.path.join(
+                tempfile.gettempdir(), "flowdeck_extracted")
+            if os.path.isdir(extracted_dir):
+                shutil.rmtree(extracted_dir, ignore_errors=True)
+
     def show_about_dialog(self):
         # Localized strings for the About dialog
         about_title = _("about_window_title", "About FlowDeck")
@@ -496,10 +504,11 @@ class AppMainWindow(QMainWindow):
         about_priv_local = _("about_privacy_local",
                              "Settings and your apps list are stored in FlowDeck's own folder on your computer.")
         about_priv_net = _("about_privacy_network",
-                           "Update checks contact GitHub, Scoop's repositories (hosted on GitHub) and Chocolatey, and include the names of the apps you track. A connection test also reaches Google Public DNS (8.8.8.8). No analytics or telemetry.")
+                           "Update checks and app lookups contact GitHub, Scoop's repositories (hosted on GitHub) and Chocolatey, and include the names of the apps you track or install. No analytics or telemetry.")
         about_priv_upd = _("about_privacy_update",
                            "Self-updates are downloaded from GitHub into your Windows temporary folder, applied to the app folder, and the temporary files are then removed.")
-
+        about_priv_dl = _("about_privacy_downloads",
+                          "When you click a quick-install button, the app is downloaded directly from the site listed in its Scoop or Chocolatey package, and the downloaded file is deleted after installation.")
         msg = QMessageBox(self)
         msg.setWindowTitle(about_title)
         msg.setTextInteractionFlags(Qt.TextBrowserInteraction)
@@ -528,7 +537,8 @@ class AppMainWindow(QMainWindow):
             f"<b>{about_priv_title}</b><br>"
             f"• {about_priv_local}<br>"
             f"• {about_priv_net}<br>"
-            f"• {about_priv_upd}"
+            f"• {about_priv_upd}<br>"
+            f"• {about_priv_dl}"
             f"</p>"
             f"<hr>"
             f"<p><b>{about_github}:</b> <a href='{github_url}' style='color: #2371C4;'>{github_url}</a></p>"
