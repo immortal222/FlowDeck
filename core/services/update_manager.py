@@ -132,10 +132,8 @@ class UpdateManager(QObject):
 
     def _has_network_connection(self):
         try:
-            socket.setdefaulttimeout(2)
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.connect(("8.8.8.8", 53))
-            sock.close()
+            with socket.create_connection(("api.github.com", 443), timeout=2):
+                pass
             logger.info(
                 "Internet connection detected. Proceeding with update check.")
             return True

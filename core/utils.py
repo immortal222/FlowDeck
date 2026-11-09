@@ -17,10 +17,10 @@ logger = logging.getLogger(__name__)
 
 
 def is_internet_available():
-    """Verifies active internet connectivity via DNS connection attempt."""
+    """Verifies active internet connectivity by opening a connection to GitHub."""
     try:
-        # Connection attempt to Cloudflare DNS
-        socket.create_connection(("1.1.1.1", 53), timeout=2)
+        with socket.create_connection(("api.github.com", 443), timeout=2):
+            pass
         return True
     except OSError:
         return False
