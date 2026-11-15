@@ -308,7 +308,6 @@ def localize_wizard_page(controller):
     ui.appNameInput.setPlaceholderText(
         _("wiz_ui_app_name_placeholder", "e.g., Firefox Portable"))
 
-    ui.lblCategory_wizard.setText(_("wiz_ui_lbl_category", "Category"))
     ui.installButton.setText(_("wiz_ui_btn_install", "Install Application"))
 
     if hasattr(ui, 'sidebarTitle'):

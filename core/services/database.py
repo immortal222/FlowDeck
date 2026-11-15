@@ -85,6 +85,7 @@ class DatabaseManager:
             current_version TEXT DEFAULT '1.0',
             latest_version TEXT DEFAULT NULL,
             homepage TEXT DEFAULT '',
+            category TEXT NOT NULL DEFAULT 'Uncategorized',
             is_favorite INTEGER DEFAULT 0,
             usage_count INTEGER DEFAULT 0,
             added_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -102,20 +103,25 @@ class DatabaseManager:
                 if "is_favorite" not in columns:
                     cursor.execute(
                         "ALTER TABLE apps ADD COLUMN is_favorite INTEGER DEFAULT 0")
+                if "category" not in columns:
+                    cursor.execute(
+                        "ALTER TABLE apps ADD COLUMN category TEXT NOT NULL DEFAULT 'Uncategorized'")
+                cursor.execute(
+                    "UPDATE apps SET category = 'Uncategorized' WHERE category = 'Other'")
                 conn.commit()
                 logger.info("Database initialized successfully.")
         except Exception as e:
             logger.error(f"Error creating tables: {e}")
 
-    def add_or_update_app(self, name, local_path, exe_path, source="manual", update_url="", current_version="1.0", latest_version=None, homepage="", install_method="unknown"):
+    def add_or_update_app(self, name, local_path, exe_path, source="manual", update_url="", current_version="1.0", latest_version=None, homepage="", install_method="unknown", category=None):
         """Inserts or updates an application entry with relative paths if inside app root."""
         # Convert absolute paths to relative before writing to database
         rel_local_path = PathManager.to_relative_path(local_path)
         rel_exe_path = PathManager.to_relative_path(exe_path)
 
         query = """
-        INSERT INTO apps (name, local_path, exe_path, source, install_method, update_url, current_version, latest_version, homepage)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO apps (name, local_path, exe_path, source, install_method, update_url, current_version, latest_version, homepage, category)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(name) DO UPDATE SET
             local_path=excluded.local_path,
             exe_path=excluded.exe_path,
@@ -124,13 +130,17 @@ class DatabaseManager:
             update_url=excluded.update_url,
             current_version=excluded.current_version,
             latest_version=excluded.latest_version,
-            homepage=excluded.homepage
+            homepage=excluded.homepage,
+            category=CASE WHEN ? IS NULL THEN apps.category ELSE excluded.category END
         """
+        values = (name, rel_local_path, rel_exe_path, source, install_method,
+                  update_url, current_version, latest_version, homepage,
+                  category if category is not None else "Uncategorized",
+                  category)
         try:
             with self.get_connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute(query, (name, rel_local_path, rel_exe_path,
-                               source, install_method, update_url, current_version, latest_version, homepage))
+                cursor.execute(query, values)
                 conn.commit()
                 return True
         except Exception as e:
@@ -143,8 +153,7 @@ class DatabaseManager:
                         cursor = conn.cursor()
                         cursor.execute(
                             "ALTER TABLE apps ADD COLUMN install_method TEXT DEFAULT 'unknown'")
-                        cursor.execute(query, (name, rel_local_path, rel_exe_path,
-                                       source, install_method, update_url, current_version, latest_version, homepage))
+                        cursor.execute(query, values)
                         conn.commit()
                         logger.info(
                             f"Success after schema update: added/updated {name}")
@@ -285,17 +294,24 @@ class DatabaseManager:
                 logger.error(
                     f"Error toggling favorite status: {e}", exc_info=True)
 
-    def update_app_details(self, app_id, name, version, exe_path):
+    def update_app_details(self, app_id, name, version, exe_path, category=None):
         """Updates basic application details and converts exe_path to relative."""
         rel_exe_path = PathManager.to_relative_path(exe_path)
-        query = "UPDATE apps SET name = ?, current_version = ?, exe_path = ? WHERE id = ?"
+        query = """
+        UPDATE apps
+        SET name = ?, current_version = ?, exe_path = ?,
+            category = COALESCE(?, category)
+        WHERE id = ?
+        """
         try:
             with self.get_connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute(query, (name, version, rel_exe_path, app_id))
+                cursor.execute(
+                    query, (name, version, rel_exe_path, category, app_id))
                 conn.commit()
                 logger.info(
-                    f"App {app_id} updated: {name}, v{version}, {rel_exe_path}")
+                    f"App {app_id} updated: {name}, v{version}, "
+                    f"{rel_exe_path}, category={category}")
                 return True
         except Exception as e:
             logger.error(f"Error updating app details for ID {app_id}: {e}")

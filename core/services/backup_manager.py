@@ -117,6 +117,7 @@ class BackupManager(QObject):
                     "current_version": app_info.get("current_version", "1.0"),
                     "latest_version": app_info.get("latest_version", "1.0"),
                     "homepage": app_info.get("homepage", ""),
+                    "category": app_info.get("category", "Uncategorized"),
                     "size_bytes": self.get_folder_size(full_local_path)
                 }
                 manifest_data["apps"].append(app_manifest_entry)
@@ -316,7 +317,8 @@ class BackupManager(QObject):
                         update_url=app_info.get("update_url", ""),
                         current_version=app_info.get("current_version", "1.0"),
                         latest_version=app_info.get("latest_version", "1.0"),
-                        homepage=app_info.get("homepage", "")
+                        homepage=app_info.get("homepage", ""),
+                        category=app_info.get("category")
                     )
                 except Exception as db_err:
                     logger.error(

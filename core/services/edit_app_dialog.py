@@ -45,6 +45,14 @@ class AppEditDialog(QDialog):
         self.txt_name = QLineEdit()
         layout.addWidget(self.txt_name)
 
+        layout.addWidget(QLabel(_("edit_category_label", "Category:")))
+        self.combo_category = QComboBox()
+        self.combo_category.addItems(sorted([
+            "Development", "Education", "Games", "Internet",
+            "Multimedia", "Office", "Security", "Tools", "Uncategorized",
+        ], key=str.casefold))
+        layout.addWidget(self.combo_category)
+
         # Version with Scoop validation
         layout.addWidget(QLabel(_("edit_version_label", "Version:")))
         h_ver_layout = QHBoxLayout()
@@ -88,6 +96,16 @@ class AppEditDialog(QDialog):
         """Populates fields with existing application data."""
         self.txt_name.setText(self.app_data.get('name', ''))
         self.txt_version.setText(self.app_data.get('current_version', '1.0'))
+        category = self.app_data.get('category') or 'Uncategorized'
+        if self.combo_category.findText(category) == -1:
+            categories = [
+                self.combo_category.itemText(index)
+                for index in range(self.combo_category.count())
+            ]
+            categories.append(category)
+            self.combo_category.clear()
+            self.combo_category.addItems(sorted(categories, key=str.casefold))
+        self.combo_category.setCurrentText(category)
 
         exe_path = self.app_data.get('exe_path', '')
         local_path = self.app_data.get('local_path', '')
@@ -148,6 +166,7 @@ class AppEditDialog(QDialog):
         """Validates and persists changes to the database."""
         new_name = self.txt_name.text().strip()
         new_version = self.txt_version.text().strip()
+        new_category = self.combo_category.currentText().strip()
         new_exe_display_text = self.combo_exe.currentText().strip()
 
         # Determine final executable path
@@ -179,6 +198,6 @@ class AppEditDialog(QDialog):
                 return
 
         success = self.db.update_app_details(
-            self.app_data['id'], new_name, new_version, new_exe)
+            self.app_data['id'], new_name, new_version, new_exe, new_category)
         if success:
             self.accept()

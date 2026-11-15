@@ -170,7 +170,29 @@ class UnifiedInstallDialog(QDialog):
         self.name_input = QLineEdit(app_name)
         layout.addWidget(self.name_input)
 
+        layout.addWidget(QLabel(_("wiz_ui_lbl_category", "Category")))
+        self.category_combo = QComboBox()
+        self.category_combo.addItems(sorted([
+            "Development", "Education", "Games", "Internet",
+            "Multimedia", "Office", "Security", "Tools", "Uncategorized",
+        ], key=str.casefold))
+        self.category_combo.setCurrentText("Uncategorized")
+        layout.addWidget(self.category_combo)
+
         self._setup_db_name_suggestion(layout, app_name)
+
+        existing_category = self._get_existing_category(app_name)
+        if existing_category:
+            if self.category_combo.findText(existing_category) == -1:
+                categories = [
+                    self.category_combo.itemText(index)
+                    for index in range(self.category_combo.count())
+                ]
+                categories.append(existing_category)
+                self.category_combo.clear()
+                self.category_combo.addItems(
+                    sorted(categories, key=str.casefold))
+            self.category_combo.setCurrentText(existing_category)
 
         # 2. Version
         layout.addWidget(QLabel(_("wiz_step5_title", "Version:")))
@@ -242,6 +264,15 @@ class UnifiedInstallDialog(QDialog):
 
         layout.addLayout(hint_layout)
 
+    def _get_existing_category(self, app_name):
+        if not self.db or not hasattr(self.db, "get_app_by_name"):
+            return None
+
+        app = self.db.get_app_by_name(app_name)
+        if not app and self.suggested_db_name:
+            app = self.db.get_app_by_name(self.suggested_db_name)
+        return app.get("category") if app else None
+
     def use_database_name(self):
         if self.suggested_db_name:
             self.name_input.setText(self.suggested_db_name)
@@ -250,7 +281,8 @@ class UnifiedInstallDialog(QDialog):
         return (
             self.name_input.text().strip(),
             self.ver_input.text().strip(),
-            self.exe_combo.currentText()
+            self.exe_combo.currentText(),
+            self.category_combo.currentText()
         )
 
 
@@ -289,10 +321,6 @@ class WizardController(QObject):
         return self.main_window.settings_controller.config.get("install_path")
 
     def setup_ui_connections(self):
-        self.ui.categoryCombo.clear()
-        self.ui.categoryCombo.addItems(
-            ["Tools", "Internet", "Multimedia", "Games", "Other"])
-
         self.ui.browseButton.clicked.connect(self.browse_file)
         self.ui.installButton.clicked.connect(self.start_install_from_button)
 
@@ -1028,7 +1056,7 @@ class WizardController(QObject):
         dialog = UnifiedInstallDialog(
             detected_name, initial_ver, clean_names, scoop_ver, self.db, self.main_window)
         if dialog.exec_() == QDialog.Accepted:
-            final_name, final_version, final_exe_rel = dialog.get_data()
+            final_name, final_version, final_exe_rel, category = dialog.get_data()
 
             # Clean up previous install folder if name changed or if an older installation folder exists
             final_target = os.path.join(self.portable_root, final_name)
@@ -1069,13 +1097,22 @@ class WizardController(QObject):
             self.log(_("wiz_log_version_set", "Version set: {final_version}").format(
                 final_version=final_version))
             self._finalize_app_install(
-                final_name, final_target, final_exe_path, final_version, latest_ver, install_method="zip")
+                final_name,
+                final_target,
+                final_exe_path,
+                final_version,
+                latest_ver,
+                install_method="zip",
+                category=category
+            )
         else:
             self.log(_("wiz_log_install_cancelled",
                      "Installation cancelled by user."))
             shutil.rmtree(extracted_folder, ignore_errors=True)
 
-    def _finalize_app_install(self, app_name, local_path, exe_path, version, latest_ver, install_method="unknown"):
+    def _finalize_app_install(
+            self, app_name, local_path, exe_path, version, latest_ver,
+            install_method="unknown", category=None):
         """Handles database registration and shortcut creation."""
         source = "manual"
         url = ""
@@ -1110,7 +1147,8 @@ class WizardController(QObject):
             current_version=version,
             latest_version=latest_ver,
             homepage=homepage_url,
-            install_method=install_method
+            install_method=install_method,
+            category=category
         )
 
         self.create_shortcut(app_name, exe_path)

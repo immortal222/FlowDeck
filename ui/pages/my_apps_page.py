@@ -144,6 +144,10 @@ class MyAppsController:
         if hasattr(self.ui, 'myApps_searchBox'):
             self.ui.myApps_searchBox.textChanged.connect(self.render_apps)
 
+        if hasattr(self.ui, 'myApps_catCombo'):
+            self.ui.myApps_catCombo.currentIndexChanged.connect(
+                self.render_apps)
+
         if hasattr(self.ui, 'myApps_sortCombo'):
             # Localized sort option labels
             sort_update_label = _(
@@ -215,6 +219,7 @@ class MyAppsController:
                     app.get('current_version'),
                     app.get('latest_version'),
                     app.get('is_favorite', 0),
+                    app.get('category'),
                 ))
             else:
                 snapshot.append((
@@ -225,8 +230,45 @@ class MyAppsController:
                     app[6] if len(app) > 6 else None,
                     app[7] if len(app) > 7 else None,
                     app[8] if len(app) > 8 else 0,
+                    app[9] if len(app) > 9 else None,
                 ))
         return tuple(snapshot)
+
+    def _refresh_category_filter(self):
+        if not hasattr(self.ui, 'myApps_catCombo'):
+            return
+
+        combo = self.ui.myApps_catCombo
+        selected_category = combo.currentData()
+        all_label = (
+            combo.itemText(0)
+            if combo.count()
+            else _("apps_ui_my_apps_filter_all", "All")
+        )
+        previous_blocked = combo.blockSignals(True)
+        combo.clear()
+        combo.addItem(all_label, None)
+
+        categories = {
+            str(app.get("category") or "Uncategorized")
+            for app in self.cached_apps
+        }
+        for category in sorted(categories, key=str.casefold):
+            combo.addItem(category, category)
+
+        selected_index = combo.findData(selected_category)
+        combo.setCurrentIndex(selected_index if selected_index >= 0 else 0)
+        combo.blockSignals(previous_blocked)
+
+    def _filter_apps_by_category(self, apps):
+        selected_category = self.ui.myApps_catCombo.currentData() if hasattr(
+            self.ui, 'myApps_catCombo') else None
+        if not selected_category:
+            return apps
+        return [
+            app for app in apps
+            if (app.get("category") or "Uncategorized") == selected_category
+        ]
 
     def _get_cached_folder_size(self, folder_path):
         if not folder_path:
@@ -334,6 +376,7 @@ class MyAppsController:
             and self._apps_snapshot == current_snapshot
             and self._last_portable_root == current_root
         ):
+            self._refresh_category_filter()
             self.render_apps()
             self._start_size_loader({
                 os.path.normpath(app["dir"]) for app in self.cached_apps if app.get("dir")
@@ -355,6 +398,7 @@ class MyAppsController:
                 source = app.get('source', 'manual')
                 update_url = app.get('update_url', '')
                 homepage = app.get('homepage', '')
+                category = app.get('category') or 'Uncategorized'
                 db_latest_ver = app.get('latest_version', ver)
                 is_favorite = app.get('is_favorite', 0)
             else:
@@ -365,6 +409,7 @@ class MyAppsController:
                 ver = app[6] if len(app) > 6 and app[6] else '1.0'
                 source = app[4] if len(app) > 4 else 'manual'
                 update_url = app[5] if len(app) > 5 else ''
+                category = app[9] if len(app) > 9 and app[9] else 'Uncategorized'
                 db_latest_ver = app[7] if len(app) > 7 and app[7] else ver
                 is_favorite = app[8] if len(app) > 8 else 0
 
@@ -409,7 +454,8 @@ class MyAppsController:
                 "id": app_id, "name": name, "dir": safe_dir, "exe": abs_exe_path,
                 "ver": ver, "has_update": has_update, "latest_ver": latest_ver,
                 "size_gb": size_gb, "source": source, "update_url": update_url,
-                "homepage": homepage, "is_favorite": is_favorite
+                "homepage": homepage, "is_favorite": is_favorite,
+                "category": category,
             })
 
         self.folder_size_cache = {
@@ -417,6 +463,7 @@ class MyAppsController:
             if path in active_dirs
         }
 
+        self._refresh_category_filter()
         self.render_apps()
         self._start_size_loader(active_dirs)
 
@@ -435,7 +482,7 @@ class MyAppsController:
                     widget.deleteLater()
             QApplication.processEvents()
 
-        display_apps = list(self.cached_apps)
+        display_apps = self._filter_apps_by_category(list(self.cached_apps))
 
         # Localized sort labels
         sort_az_label = _("apps_ui_my_apps_sort_az", "Name (A-Z)")
@@ -712,7 +759,8 @@ class MyAppsController:
             "name": app["name"],
             "current_version": app["ver"],
             "local_path": app["dir"],
-            "exe_path": app["exe"]
+            "exe_path": app["exe"],
+            "category": app.get("category", "Uncategorized"),
         }
 
         dialog = AppEditDialog(app_data_for_dialog, self.db, self.main_window)

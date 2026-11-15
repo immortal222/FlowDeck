@@ -423,7 +423,7 @@ QLabel#wizard_lblSubTitle {
 
 
 /* Τα labels της σελίδας wizard */
-QLabel#lblCategory_wizard, QLabel#lblAppName_wizard, QLabel#lblPath_wizard, QLabel#lblConsole_wizard {
+QLabel#lblAppName_wizard, QLabel#lblPath_wizard, QLabel#lblConsole_wizard {
     /*color: #DBE5EB;*/
     color: rgb(219,229,235);
     font-size: 13px;
@@ -672,6 +672,7 @@ QLineEdit#myApps_searchBox:focus {
 }
 
 /* Τα dropdowns και τα κουμπιά της Μπάρας Εργαλείων */
+QComboBox#myApps_catCombo,
 QComboBox#myApps_sortCombo, 
 QPushButton#myApps_viewBtn, 
 QPushButton#myApps_updateAllBtn {
@@ -684,11 +685,12 @@ QPushButton#myApps_updateAllBtn {
     font-weight: bold;
 }
 
+QComboBox#myApps_catCombo::drop-down,
 QComboBox#myApps_sortCombo::drop-down {
     border: none;
 }
 
-QComboBox#myApps_sortCombo QAbstractItemView {
+QComboBox#myApps_sortCombo QAbstractItemView, QComboBox#myApps_catCombo QAbstractItemView {
     background-color: #1A1A1A;
     color: #DBE5EB;
     selection-background-color: #2B9099;
@@ -696,6 +698,7 @@ QComboBox#myApps_sortCombo QAbstractItemView {
 
 QPushButton#myApps_viewBtn:hover, 
 QPushButton#myApps_updateAllBtn:hover,
+QComboBox#myApps_catCombo:hover,
 QComboBox#myApps_sortCombo:hover {
     background-color: #222222;
     border: 1px solid #555555;
@@ -1419,7 +1422,7 @@ QLabel#wizard_lblSubTitle {
     background: transparent;
 }
 
-QLabel#lblCategory_wizard, QLabel#lblAppName_wizard, QLabel#lblPath_wizard, QLabel#lblConsole_wizard {
+QLabel#lblAppName_wizard, QLabel#lblPath_wizard, QLabel#lblConsole_wizard {
     color: rgb(30, 40, 50);
     font-size: 13px;
     font-weight: bold;
@@ -1624,6 +1627,7 @@ QLineEdit#myApps_searchBox:focus {
     border: 1px solid #2B9099;
 }
 
+QComboBox#myApps_catCombo,
 QComboBox#myApps_sortCombo,
 QPushButton#myApps_viewBtn,
 QPushButton#myApps_updateAllBtn {
@@ -1636,11 +1640,13 @@ QPushButton#myApps_updateAllBtn {
     font-weight: bold;
 }
 
+QComboBox#myApps_catCombo::drop-down,
 QComboBox#myApps_sortCombo::drop-down {
     border: none;
 }
 
-QComboBox#myApps_sortCombo QAbstractItemView {
+QComboBox#myApps_sortCombo QAbstractItemView, 
+QComboBox#myApps_catCombo QAbstractItemView {
     background-color: #FFFFFF;
     color: #1A1A1A;
     selection-background-color: #2B9099;
@@ -1648,7 +1654,8 @@ QComboBox#myApps_sortCombo QAbstractItemView {
 
 QPushButton#myApps_viewBtn:hover,
 QPushButton#myApps_updateAllBtn:hover,
-QComboBox#myApps_sortCombo:hover {
+QComboBox#myApps_sortCombo:hover,
+QComboBox#myApps_catCombo:hover {
     background-color: #F0F0F0;
     border: 1px solid #AAAAAA;
 }

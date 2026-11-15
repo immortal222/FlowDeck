@@ -769,7 +769,7 @@
       <item>
        <widget class="QStackedWidget" name="contentStackedWidget">
         <property name="currentIndex">
-         <number>2</number>
+         <number>3</number>
         </property>
         <widget class="QWidget" name="page_dashboard">
          <layout class="QVBoxLayout" name="verticalLayout">
@@ -1505,7 +1505,7 @@
                   <number>5</number>
                  </property>
                  <item>
-                  <layout class="QVBoxLayout" name="verticalLayout_14" stretch="1,0,0,0,0,0">
+                  <layout class="QVBoxLayout" name="verticalLayout_14" stretch="1,0,0,0,0">
                    <property name="spacing">
                     <number>5</number>
                    </property>
@@ -1650,20 +1650,6 @@
                         <string>π.χ. Firefox Portable</string>
                        </property>
                       </widget>
-                     </item>
-                    </layout>
-                   </item>
-                   <item>
-                    <layout class="QHBoxLayout" name="horizontalLayout_14" stretch="0,1">
-                     <item>
-                      <widget class="QLabel" name="lblCategory_wizard">
-                       <property name="text">
-                        <string>Κατηγορία</string>
-                       </property>
-                      </widget>
-                     </item>
-                     <item>
-                      <widget class="QComboBox" name="categoryCombo"/>
                      </item>
                     </layout>
                    </item>
@@ -2727,6 +2713,15 @@
               </spacer>
              </item>
              <item>
+              <widget class="QComboBox" name="myApps_catCombo">
+               <item>
+                <property name="text">
+                 <string>All</string>
+                </property>
+               </item>
+              </widget>
+             </item>
+             <item>
               <widget class="QComboBox" name="myApps_sortCombo">
                <item>
                 <property name="text">
@@ -2767,8 +2762,8 @@
               <rect>
                <x>0</x>
                <y>0</y>
-               <width>98</width>
-               <height>28</height>
+               <width>669</width>
+               <height>413</height>
               </rect>
              </property>
              <layout class="QGridLayout" name="gridLayout_2"/>

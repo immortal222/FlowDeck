@@ -31,8 +31,9 @@ class AppRepository:
     def toggle_favorite(self, app_id, status):
         self.db.toggle_favorite(app_id, status)
 
-    def update_app_details(self, app_id, name, version, exe_path):
-        return self.db.update_app_details(app_id, name, version, exe_path)
+    def update_app_details(self, app_id, name, version, exe_path, category=None):
+        return self.db.update_app_details(
+            app_id, name, version, exe_path, category)
 
     def get_registered_directories(self):
         directories = set()
@@ -159,7 +160,7 @@ class AppRepository:
                 f"Could not resolve shortcut target for {shortcut_file}: {exc}")
             return None
 
-    def add_or_update_app(self, name, local_path, exe_path, source="manual", update_url="", current_version="1.0", latest_version=None, homepage="", install_method="unknown"):
+    def add_or_update_app(self, name, local_path, exe_path, source="manual", update_url="", current_version="1.0", latest_version=None, homepage="", install_method="unknown", category=None):
         return self.db.add_or_update_app(
             name=name,
             local_path=local_path,
@@ -169,10 +170,11 @@ class AppRepository:
             current_version=current_version,
             latest_version=latest_version,
             homepage=homepage,
-            install_method=install_method
+            install_method=install_method,
+            category=category
         )
 
-    def register_app(self, name, local_path, exe_path, source="manual", current_version="1.0", latest_version=None, homepage="", install_method="unknown"):
+    def register_app(self, name, local_path, exe_path, source="manual", current_version="1.0", latest_version=None, homepage="", install_method="unknown", category=None):
         return self.add_or_update_app(
             name=name,
             local_path=local_path,
@@ -181,5 +183,6 @@ class AppRepository:
             current_version=current_version,
             latest_version=latest_version,
             homepage=homepage,
-            install_method=install_method
+            install_method=install_method,
+            category=category
         )
