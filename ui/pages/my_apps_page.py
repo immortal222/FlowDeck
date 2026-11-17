@@ -128,7 +128,11 @@ class MyAppsController:
         self.main_window = main_window
         self.ui = ui
         self.db = db
-        self.view_mode = "grid"
+        config = self.main_window.settings_controller.config
+        stored_view_mode = config.get("my_apps_view", "grid")
+        self.view_mode = (
+            stored_view_mode if stored_view_mode in ("grid", "list")
+            else "grid")
 
         self.cached_apps = []
         self.icon_cache = {}
@@ -173,6 +177,7 @@ class MyAppsController:
 
         # Localize static UI elements
         localize_myapps_page(self)
+        self._update_view_button_text()
 
         # 2. Initial data load
         self.refresh_data()
@@ -184,8 +189,17 @@ class MyAppsController:
 
     def toggle_view_mode(self):
         self.view_mode = "list" if self.view_mode == "grid" else "grid"
-        self.ui.myApps_viewBtn.setText(f"View: {self.view_mode.title()}")
+        config = self.main_window.settings_controller.config
+        config["my_apps_view"] = self.view_mode
+        config.save()
+        self._update_view_button_text()
         self.render_apps()
+
+    def _update_view_button_text(self):
+        if hasattr(self.ui, 'myApps_viewBtn'):
+            self.ui.myApps_viewBtn.setText(_(
+                f"apps_view_{self.view_mode}",
+                f"View: {self.view_mode.title()}"))
 
     def get_safe_target_dir(self, db_folder_path, db_exe_path):
         target_dir = db_folder_path

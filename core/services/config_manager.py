@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 class ConfigManager:
     DEFAULT_CONFIG = {
         "install_path": "Apps",
+        "my_apps_view": "grid",
         "minimize_to_tray": False,
         "language": "English",
         "theme": "Modern Dark",
