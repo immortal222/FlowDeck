@@ -651,7 +651,7 @@ QLabel#myApps_lblStats {
 }
 
 /* Μπάρα Εργαλείων (Toolbar) */
-QFrame#myApps_toolbarFrame {
+QFrame#myApps_filterFrame {
     background: transparent;
     padding: 10px 0px;
 }
@@ -664,7 +664,7 @@ QLineEdit#myApps_searchBox {
     padding: 8px 12px;
     color: #DBE5EB;
     font-size: 13px;
-    min-width: 300px;
+    min-width: 200px;
 }
 
 QLineEdit#myApps_searchBox:focus {
@@ -1608,7 +1608,7 @@ QLabel#myApps_lblStats {
     background: transparent;
 }
 
-QFrame#myApps_toolbarFrame {
+QFrame#myApps_filterFrame {
     background: transparent;
     padding: 10px 0px;
 }
