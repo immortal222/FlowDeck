@@ -332,6 +332,22 @@ def get_clean_app_name(name):
     return " ".join(cleaned.split()).title()
 
 
+_APP_NAME_SUFFIXES = (
+    "_portable", "-portable", ".portable", " portable", " Application",
+    " application", " applications", " app", " installer", " install",
+    " setup", "x64", "x86", "64bit", "32bit", " beta", " preview",
+    " release"
+)
+
+
+def _strip_app_name_suffixes(name):
+    cleaned = name
+    for suffix in _APP_NAME_SUFFIXES:
+        pattern = re.compile(re.escape(suffix) + r'$', re.IGNORECASE)
+        cleaned = pattern.sub('', cleaned).strip()
+    return cleaned
+
+
 def get_normalized_app_name(name):
     """
     Processes a raw application name and generates a list of candidate strings ordered by specificity:
@@ -351,16 +367,7 @@ def get_normalized_app_name(name):
     candidates = []
 
     # Candidate 1: Remove common technical suffixes
-    suffixes = [
-        "_portable", "-portable", ".portable", " portable", " Application",
-        " application", " applications", " app", " installer", " install",
-        " setup", "x64", "x86", "64bit", "32bit", " beta", " preview",
-        " release"
-    ]
-    cand1 = text
-    for suf in suffixes:
-        pattern = re.compile(re.escape(suf) + r'$', re.IGNORECASE)
-        cand1 = pattern.sub('', cand1).strip()
+    cand1 = _strip_app_name_suffixes(text)
 
     if cand1:
         candidates.append(cand1)
@@ -494,18 +501,12 @@ def get_pe_name(file_path):
         if pe:
             pe.close()
 
-    # Priority 1: ProductName
-    if product_name:
-        return product_name
-
-    # Priority 2: FileDescription
-    if file_desc:
-        return file_desc
-
-    # Priority 3: OriginalFilename
-    if original_fn:
-        return re.sub(r'(?i)\.exe$', '', original_fn).strip()
-
+    # Preserve the metadata priority while removing common technical suffixes.
+    name = product_name or file_desc
+    if not name and original_fn:
+        name = re.sub(r'(?i)\.exe$', '', original_fn).strip()
+    if name:
+        return _strip_app_name_suffixes(name) or name
     return None
 
 
