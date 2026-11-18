@@ -19,6 +19,9 @@ class AppRepository:
     def get_app_by_name(self, name):
         return self.db.get_app_by_name(name)
 
+    def rename_app(self, old_name, new_name):
+        return self.db.rename_app(old_name, new_name)
+
     def delete_app(self, name):
         return self.db.delete_app(name)
 

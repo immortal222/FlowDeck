@@ -209,6 +209,24 @@ class DatabaseManager:
             logger.error(f"Error retrieving application {name}: {e}")
             return None
 
+    def rename_app(self, old_name, new_name):
+        """Renames an existing database record in place."""
+        if not old_name or not new_name or old_name == new_name:
+            return True
+
+        query = "UPDATE apps SET name = ? WHERE name = ?"
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(query, (new_name, old_name))
+                conn.commit()
+                return cursor.rowcount == 1
+        except Exception as e:
+            logger.error(
+                f"Failed to rename application '{old_name}' to '{new_name}': {e}",
+                exc_info=True)
+            return False
+
     def delete_app(self, name):
         """Removes an application from the database."""
         query = "DELETE FROM apps WHERE name = ?"

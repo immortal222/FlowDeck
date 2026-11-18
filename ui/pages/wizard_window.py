@@ -13,7 +13,6 @@ from difflib import SequenceMatcher
 from urllib.parse import quote_plus
 
 # Third-Party Library Imports
-import win32com.client
 from PyQt5.QtCore import QEvent, QObject, QSize, Qt
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import (QApplication, QComboBox, QDialog, QFileDialog,
@@ -27,7 +26,7 @@ from core.services.installer import AppInstaller
 from core.services.path_manager import PathManager
 from core.utils import (get_normalized_app_name, get_pe_name, get_pe_version,
                         get_portable_apps_metadata, is_app_running, is_internet_available,
-                        resolve_paf_metadata, scan_ini_files)
+                        resolve_paf_metadata, scan_ini_files, find_casefold_app)
 from locales.localization import _
 from locales.ui_localizer import localize_wizard_page
 from ui.styles.styles import DIALOG_LIGHT_STYLE, DIALOG_STYLE
@@ -784,6 +783,33 @@ class WizardController(QObject):
         else:
             return False
 
+    def _confirm_zip_replacement(self, existing_app, new_name):
+        """Confirms replacement of an existing app matched case-insensitively."""
+        existing_name = existing_app.get("name", "Unknown")
+        msg = QMessageBox(self.main_window)
+        msg.setWindowTitle(_("wiz_replace_title",
+                           "Replace Existing Installation"))
+        msg.setIcon(QMessageBox.Warning)
+        msg.setStyleSheet(self.get_msg_style())
+        msg.setText(_("wiz_replace_msg",
+                    "The application '{existing_name}' is already installed. Installing '{new_name}' will replace the old version and the application's files in its folder.\n\nSettings or data stored inside the application folder may be lost. It is recommended to create a backup first.\n\nDo you want to continue?").format(
+            existing_name=existing_name,
+            new_name=new_name
+        ))
+
+        btn_replace = msg.addButton(
+            _("wiz_replace_btn_continue", "Replace and Continue"),
+            QMessageBox.AcceptRole
+        )
+        btn_replace.setObjectName("primaryButton")
+        btn_cancel = msg.addButton(
+            _("wiz_replace_btn_cancel", "Cancel"),
+            QMessageBox.RejectRole
+        )
+        msg.setDefaultButton(btn_cancel)
+        msg.exec_()
+        return msg.clickedButton() == btn_replace
+
     def _handle_paf_flow(self, file_path):
         """Installation flow for .paf (PortableApps.com) files."""
         filename = os.path.basename(file_path)
@@ -1058,12 +1084,45 @@ class WizardController(QObject):
         if dialog.exec_() == QDialog.Accepted:
             final_name, final_version, final_exe_rel, category = dialog.get_data()
 
+            existing_record = None
+            if hasattr(self.db, "get_all_apps"):
+                try:
+                    existing_record = find_casefold_app(
+                        self.db.get_all_apps(), final_name)
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to check existing app by name: {e}")
+
+            if existing_record:
+                if not self._confirm_zip_replacement(existing_record, final_name):
+                    self.log(_("wiz_log_install_cancelled",
+                             "Installation cancelled by user."))
+                    shutil.rmtree(extracted_folder, ignore_errors=True)
+                    return
+
             # Clean up previous install folder if name changed or if an older installation folder exists
             final_target = os.path.join(self.portable_root, final_name)
-            existing_record = self.db.get_app_by_name(
-                final_name) if hasattr(self.db, "get_app_by_name") else None
             if existing_record:
                 old_folder = existing_record.get("local_path", "")
+                old_name = existing_record.get("name", "")
+
+                if old_name != final_name:
+                    if hasattr(self.db, "rename_app"):
+                        if not self.db.rename_app(old_name, final_name):
+                            logger.error(
+                                f"Failed to rename database record '{old_name}' to '{final_name}'")
+                            shutil.rmtree(extracted_folder, ignore_errors=True)
+                            return
+
+                    old_shortcut = os.path.join(
+                        self.portable_root, "__Apps__", f"{old_name}.lnk")
+                    if os.path.exists(old_shortcut):
+                        try:
+                            os.remove(old_shortcut)
+                        except Exception as e:
+                            logger.warning(
+                                f"Failed to remove old shortcut: {e}")
+
                 if old_folder and os.path.exists(old_folder) and os.path.normpath(old_folder) != os.path.normpath(extracted_folder) and os.path.normpath(old_folder) != os.path.normpath(self.portable_root):
                     try:
                         shutil.rmtree(old_folder, ignore_errors=True)
@@ -1180,6 +1239,7 @@ class WizardController(QObject):
                 os.path.join(self.portable_root, "__Apps__"))
             if not os.path.exists(apps_dir):
                 os.makedirs(apps_dir)
+            import win32com.client
             shell = win32com.client.Dispatch("WScript.Shell")
             shortcut = shell.CreateShortCut(
                 os.path.join(apps_dir, f"{name}.lnk"))
