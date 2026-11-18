@@ -511,32 +511,41 @@ class AppMainWindow(QMainWindow):
                            "Self-updates are downloaded from GitHub into your Windows temporary folder, applied to the app folder, and the temporary files are then removed.")
         about_priv_dl = _("about_privacy_downloads",
                           "When you click a quick-install button, the app is downloaded directly from the site listed in its Scoop or Chocolatey package, and the downloaded file is deleted after installation.")
-        msg = QMessageBox(self)
-        msg.setWindowTitle(about_title)
-        msg.setTextInteractionFlags(Qt.TextBrowserInteraction)
+        about_disclaimer_title = _("about_disclaimer_title", "Disclaimer")
+        about_disclaimer_text = _(
+            "about_disclaimer_text",
+            "FlowDeck is provided \"as is,\" without warranties of any kind. You use it at your own risk. You should keep backups of your data. To the maximum extent permitted by law, the creator is not liable for data loss or other damages arising from the use of FlowDeck. Third-party applications and services are subject to their own terms and policies."
+        )
+        dialog = QtWidgets.QDialog(self)
+        dialog.setWindowTitle(about_title)
 
-        # Load and set the FlowDeck icon for the About dialog
         icon_path = PathManager.get_asset_path("icons/FlowDeck.png")
         if os.path.exists(icon_path):
-            msg.setIconPixmap(QtGui.QPixmap(icon_path).scaled(
-                64, 64, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            dialog.setWindowIcon(QtGui.QIcon(icon_path))
 
         github_url = f"https://github.com/{GITHUB_USERNAME}/{GITHUB_REPO}"
+        scroll_text_color = (
+            "#252525"
+            if self.settings_controller.config.get("theme", "Modern Dark")
+            == "Modern Light"
+            else "#a0a0a0"
+        )
 
-        # Set the HTML content for the About dialog with localized strings
-        msg.setText(
+        about_header_html = (
             f"<h2>FlowDeck</h2>"
             f"<p><b>{about_ver}:</b> {VERSION} &nbsp;&nbsp;|&nbsp;&nbsp; <b>{about_license_lbl}:</b> <span style='color: #41CD52;'>{about_license_val}</span></p>"
             f"<p>{about_desc}</p>"
+        )
+        about_scroll_html = (
             f"<hr>"
-            f"<p style='font-size: 11px; line-height: 1.5; color: #a0a0a0;'>"
+            f"<p style='font-size: 11px; line-height: 1.5; color: {scroll_text_color};'>"
             f"• {about_scoop}<br>"
             f"• {about_choco}<br>"
             f"• {about_7z}<br>"
             f"• {about_qt}"
             f"</p>"
             f"<hr>"
-            f"<p style='font-size: 11px; line-height: 1.5; color: #a0a0a0;'>"
+            f"<p style='font-size: 11px; line-height: 1.5; color: {scroll_text_color};'>"
             f"<b>{about_priv_title}</b><br>"
             f"• {about_priv_local}<br>"
             f"• {about_priv_net}<br>"
@@ -544,26 +553,60 @@ class AppMainWindow(QMainWindow):
             f"• {about_priv_dl}"
             f"</p>"
             f"<hr>"
+            f"<p style='font-size: 11px; line-height: 1.5; color: {scroll_text_color};'>"
+            f"<b>{about_disclaimer_title}</b><br>"
+            f"{about_disclaimer_text}"
+            f"</p>"
+            f"<hr>"
+        )
+        about_footer_html = (
             f"<p><b>{about_github}:</b> <a href='{github_url}' style='color: #2371C4;'>{github_url}</a></p>"
             f"<p style='font-size: 10px; color: #777;'>© 2026 George Papadopoulos. Released under GNU GPLv3.</p>"
         )
 
-        check_updates_button = msg.addButton(
+        layout = QtWidgets.QVBoxLayout(dialog)
+        header = QtWidgets.QLabel(dialog)
+        header.setTextFormat(Qt.RichText)
+        header.setText(about_header_html)
+        layout.addWidget(header)
+
+        text_browser = QtWidgets.QTextBrowser(dialog)
+        text_browser.setOpenExternalLinks(True)
+        text_browser.setTextInteractionFlags(Qt.TextBrowserInteraction)
+        text_browser.setHtml(about_scroll_html)
+        text_browser.document().setDocumentMargin(10)
+        scroll_container = QtWidgets.QWidget(dialog)
+        scroll_layout = QtWidgets.QVBoxLayout(scroll_container)
+        scroll_layout.setContentsMargins(10, 10, 10, 10)
+        scroll_layout.addWidget(text_browser)
+        layout.addWidget(scroll_container)
+
+        footer = QtWidgets.QLabel(dialog)
+        footer.setTextFormat(Qt.RichText)
+        footer.setTextInteractionFlags(Qt.TextBrowserInteraction)
+        footer.setOpenExternalLinks(True)
+        footer.setText(about_footer_html)
+        layout.addWidget(footer)
+
+        button_box = QtWidgets.QDialogButtonBox(dialog)
+        check_updates_button = button_box.addButton(
             _("check_updates_button", "Check for Updates"),
-            QMessageBox.ResetRole
+            QtWidgets.QDialogButtonBox.ResetRole
         )
+        button_box.addButton(QtWidgets.QDialogButtonBox.Ok)
+        button_box.accepted.connect(dialog.accept)
+        button_box.rejected.connect(dialog.reject)
+        layout.addWidget(button_box)
 
-        ok_button = msg.addButton(
-            QMessageBox.Ok
-        )
+        def check_updates():
+            dialog.accept()
+            self.check_for_github_updates(from_about_dialog=True)
 
-        check_updates_button.clicked.connect(
-            lambda _: self.check_for_github_updates(from_about_dialog=True)
-        )
+        check_updates_button.clicked.connect(check_updates)
 
-        self.apply_dialog_theme(msg)
-
-        msg.exec()
+        self.apply_dialog_theme(dialog)
+        dialog.resize(560, 480)
+        dialog.exec_()
 
     def setup_sidebar_logic(self):
         # 1. List of navigation frames

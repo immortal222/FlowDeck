@@ -2032,6 +2032,11 @@ QLineEdit, QComboBox, QListView, QAbstractItemView {
     color: #DBE5EB;
     padding: 6px;
 }
+QTextBrowser {
+    background-color: #1A1A1A;
+    border: 1px solid #474747;
+    color: #DBE5EB;
+}
 QPushButton {
     background-color: #2A2A2A;
     border: 1px solid #474747;
@@ -2085,6 +2090,11 @@ QLineEdit, QComboBox, QListView, QAbstractItemView {
     border-radius: 4px;
     color: #1A1A1A;
     padding: 6px;
+}
+QTextBrowser {
+    background-color: #FFFFFF;
+    border: 1px solid #CCCCCC;
+    color: #1A1A1A;
 }
 QPushButton {
     background-color: #EEEEEE;
