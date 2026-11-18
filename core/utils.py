@@ -6,6 +6,7 @@ import re
 import shutil
 import socket
 import subprocess
+import unicodedata
 
 # Third-Party Library Imports
 import pefile
@@ -14,6 +15,33 @@ import pefile
 from core.services.path_manager import PathManager
 
 logger = logging.getLogger(__name__)
+
+
+def find_casefold_app(apps, app_name):
+    """Find an exact application-name match while ignoring letter case."""
+    if not app_name:
+        return None
+
+    normalized_name = unicodedata.normalize("NFKC", str(app_name)).strip()
+    if not normalized_name:
+        return None
+
+    for app in apps:
+        candidate = unicodedata.normalize(
+            "NFKC", str(app.get("name", ""))).strip()
+        if candidate == normalized_name:
+            return app
+
+    folded_name = normalized_name.casefold()
+    if not folded_name:
+        return None
+
+    for app in apps:
+        candidate = unicodedata.normalize(
+            "NFKC", str(app.get("name", ""))).strip().casefold()
+        if candidate == folded_name:
+            return app
+    return None
 
 
 def is_internet_available():
