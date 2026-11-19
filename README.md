@@ -109,12 +109,16 @@ FlowDeck acts as an orchestrator (wrapper) and respects the licenses of the CLI 
 * 7-Zip (GNU LGPL) - External executable used for Ultra compression/decompression on backups.
 
 FlowDeck itself is released under the GNU GPLv3 License. Feel free to use, modify, and contribute to this project!
-## 🗺️ Roadmap (TODO)
 
-* Implement 1-Click Update for ZIP-based applications directly from the UI.
-* Add a background scheduler for automatic orphan folder detection.
-* Enrich the HTML Activity Timeline with interactive statistical charts.
-* When checking for updates, change text to button
+## ⚠️ Disclaimer
+
+FlowDeck is provided **as-is**, without warranties of any kind. It is designed to help manage, launch, and update portable applications, but it does not guarantee that all applications or updates will be compatible with every system or will work without errors.
+
+You are responsible for reviewing the applications you install, keeping backups of your files and portable directory, and ensuring that your use complies with applicable laws and software licenses.
+
+FlowDeck may interact with external services and tools such as Scoop, Chocolatey, and 7-Zip, and may download or extract software from third-party sources. Those applications and sources are governed by their own licenses and security practices. Always verify downloads and sources before using or distributing them.
+
+By using FlowDeck, you acknowledge that you do so at your own risk. The maintainers and contributors are not liable for data loss, system damage, unexpected behavior, or losses arising from the use or inability to use this project.
 
 ## Acknowledgements / Credits
 * Developed with the assistance of **Google Gemini**, which helped with code generation, structuring, and troubleshooting.
