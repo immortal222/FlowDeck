@@ -1123,14 +1123,26 @@ class WizardController(QObject):
                             logger.warning(
                                 f"Failed to remove old shortcut: {e}")
 
-                if old_folder and os.path.exists(old_folder) and os.path.normpath(old_folder) != os.path.normpath(extracted_folder) and os.path.normpath(old_folder) != os.path.normpath(self.portable_root):
+                if (
+                    old_folder
+                    and os.path.exists(old_folder)
+                    and os.path.normpath(old_folder) != os.path.normpath(final_target)
+                    and os.path.normpath(old_folder) != os.path.normpath(extracted_folder)
+                    and os.path.normpath(old_folder) != os.path.normpath(self.portable_root)
+                ):
+                    if not self._check_and_prompt_running_app(old_folder):
+                        self.log(_("wiz_log_install_cancelled",
+                                 "Installation cancelled by user."))
+                        shutil.rmtree(extracted_folder, ignore_errors=True)
+                        return
                     try:
+                        installer.merge_directory(old_folder, final_target)
                         shutil.rmtree(old_folder, ignore_errors=True)
                         logger.info(
-                            f"Removed previous installation folder: {old_folder}")
+                            f"Migrated and removed previous installation folder: {old_folder}")
                     except Exception as e:
                         logger.warning(
-                            f"Failed to remove previous installation folder {old_folder}: {e}")
+                            f"Failed to migrate previous installation folder {old_folder}: {e}")
 
             if os.path.abspath(extracted_folder) != os.path.abspath(final_target):
                 if os.path.exists(final_target):
@@ -1141,8 +1153,10 @@ class WizardController(QObject):
                         shutil.rmtree(extracted_folder, ignore_errors=True)
                         return
 
-                    shutil.rmtree(final_target, ignore_errors=True)
-                os.rename(extracted_folder, final_target)
+                    installer.merge_directory(extracted_folder, final_target)
+                    shutil.rmtree(extracted_folder, ignore_errors=True)
+                else:
+                    os.rename(extracted_folder, final_target)
             else:
                 final_target = extracted_folder
 
@@ -1481,6 +1495,28 @@ class WizardController(QObject):
             # 5. Extraction
             self.log(_("wiz_log_extracting_7zip", "Extracting with 7-Zip..."))
             installer = AppInstaller(self.portable_root)
+
+            # Migrate previous installation folder if its path differs from the target path
+            target_app_dir = os.path.join(self.portable_root, app_name)
+            existing_record = self.db.get_app_by_name(
+                app_name) if hasattr(self.db, "get_app_by_name") else None
+            if existing_record:
+                old_folder = existing_record.get("local_path", "")
+                if (
+                    old_folder
+                    and os.path.exists(old_folder)
+                    and os.path.normpath(old_folder) != os.path.normpath(target_app_dir)
+                    and os.path.normpath(old_folder) != os.path.normpath(self.portable_root)
+                ):
+                    try:
+                        installer.merge_directory(old_folder, target_app_dir)
+                        shutil.rmtree(old_folder, ignore_errors=True)
+                        logger.info(
+                            f"Migrated previous installation folder: {old_folder}")
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to migrate previous installation folder {old_folder}: {e}")
+
             extracted_folder = installer.install_from_zip(save_path, app_name)
 
             if not extracted_folder:
@@ -1584,19 +1620,6 @@ class WizardController(QObject):
                     final_exe_path = all_exes[0]
 
             if final_exe_path:
-                # Clean up previous install folder if an older installation folder exists under a different path
-                existing_record = self.db.get_app_by_name(
-                    app_name) if hasattr(self.db, "get_app_by_name") else None
-                if existing_record:
-                    old_folder = existing_record.get("local_path", "")
-                    if old_folder and os.path.exists(old_folder) and os.path.normpath(old_folder) != os.path.normpath(extracted_folder) and os.path.normpath(old_folder) != os.path.normpath(self.portable_root):
-                        try:
-                            shutil.rmtree(old_folder, ignore_errors=True)
-                            logger.info(
-                                f"Removed previous installation folder: {old_folder}")
-                        except Exception as e:
-                            logger.warning(
-                                f"Failed to remove previous installation folder {old_folder}: {e}")
 
                 source = app_data.get('source', 'scoop')
                 url = app_data.get('update_url', '')

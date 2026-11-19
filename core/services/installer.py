@@ -64,18 +64,7 @@ class AppInstaller:
 
             self._hoist_nested_folder(temp_dir)
 
-            if not os.path.exists(final_target_dir):
-                os.makedirs(final_target_dir)
-
-            for item in os.listdir(temp_dir):
-                src_path = os.path.join(temp_dir, item)
-                dst_path = os.path.join(final_target_dir, item)
-                if os.path.exists(dst_path):
-                    if os.path.isdir(dst_path):
-                        shutil.rmtree(dst_path)
-                    else:
-                        os.remove(dst_path)
-                shutil.move(src_path, dst_path)
+            self.merge_directory(temp_dir, final_target_dir)
 
             shutil.rmtree(temp_dir)
             return final_target_dir
@@ -115,3 +104,26 @@ class AppInstaller:
                 shutil.rmtree(nested_path, ignore_errors=True)
             else:
                 break
+
+    def merge_directory(self, src_dir, dst_dir):
+        """Recursively merges contents of src_dir into dst_dir, overwriting only matching files."""
+        if not os.path.exists(dst_dir):
+            os.makedirs(dst_dir)
+
+        for item in os.listdir(src_dir):
+            src_path = os.path.join(src_dir, item)
+            dst_path = os.path.join(dst_dir, item)
+
+            if os.path.isdir(src_path):
+                # Remove conflicting file if a directory with the same name is being copied
+                if os.path.exists(dst_path) and not os.path.isdir(dst_path):
+                    os.remove(dst_path)
+                self.merge_directory(src_path, dst_path)
+            else:
+                # Overwrite existing file (or remove conflicting directory)
+                if os.path.exists(dst_path):
+                    if os.path.isdir(dst_path):
+                        shutil.rmtree(dst_path)
+                    else:
+                        os.remove(dst_path)
+                shutil.move(src_path, dst_path)
