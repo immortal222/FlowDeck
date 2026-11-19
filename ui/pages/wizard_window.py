@@ -791,8 +791,9 @@ class WizardController(QObject):
                            "Replace Existing Installation"))
         msg.setIcon(QMessageBox.Warning)
         msg.setStyleSheet(self.get_msg_style())
+        # Inform user that matching files will be updated while existing settings/data are preserved
         msg.setText(_("wiz_replace_msg",
-                    "The application '{existing_name}' is already installed. Installing '{new_name}' will replace the old version and the application's files in its folder.\n\nSettings or data stored inside the application folder may be lost. It is recommended to create a backup first.\n\nDo you want to continue?").format(
+                    "The application '{existing_name}' is already installed. Installing '{new_name}' will update the application files in its folder while preserving your existing settings and data.\n\nCreating a backup beforehand is still recommended.\n\nDo you want to continue?").format(
             existing_name=existing_name,
             new_name=new_name
         ))
