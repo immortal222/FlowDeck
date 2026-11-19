@@ -1508,6 +1508,11 @@ class WizardController(QObject):
                     and os.path.normpath(old_folder) != os.path.normpath(target_app_dir)
                     and os.path.normpath(old_folder) != os.path.normpath(self.portable_root)
                 ):
+                    # Prompt user to close running app in old folder before migrating
+                    if not self._check_and_prompt_running_app(old_folder):
+                        self.log(_("wiz_log_install_cancelled",
+                                 "Installation cancelled by user."))
+                        return
                     try:
                         installer.merge_directory(old_folder, target_app_dir)
                         shutil.rmtree(old_folder, ignore_errors=True)
@@ -1516,6 +1521,13 @@ class WizardController(QObject):
                     except Exception as e:
                         logger.warning(
                             f"Failed to migrate previous installation folder {old_folder}: {e}")
+
+            # Prompt user to close running app in target folder before extracting/merging
+            if os.path.exists(target_app_dir):
+                if not self._check_and_prompt_running_app(target_app_dir):
+                    self.log(_("wiz_log_install_cancelled",
+                             "Installation cancelled by user."))
+                    return
 
             extracted_folder = installer.install_from_zip(save_path, app_name)
 
