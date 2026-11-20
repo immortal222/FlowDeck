@@ -1320,8 +1320,8 @@
                      <rect>
                       <x>0</x>
                       <y>0</y>
-                      <width>399</width>
-                      <height>375</height>
+                      <width>98</width>
+                      <height>28</height>
                      </rect>
                     </property>
                     <layout class="QGridLayout" name="gridLayout_3"/>
@@ -2749,9 +2749,15 @@
                </item>
                <item>
                 <widget class="QComboBox" name="myApps_catCombo">
+                 <property name="minimumSize">
+                  <size>
+                   <width>140</width>
+                   <height>0</height>
+                  </size>
+                 </property>
                  <property name="maximumSize">
                   <size>
-                   <width>120</width>
+                   <width>16777215</width>
                    <height>16777215</height>
                   </size>
                  </property>
@@ -2764,6 +2770,12 @@
                </item>
                <item>
                 <widget class="QComboBox" name="myApps_sortCombo">
+                 <property name="minimumSize">
+                  <size>
+                   <width>210</width>
+                   <height>0</height>
+                  </size>
+                 </property>
                  <property name="maximumSize">
                   <size>
                    <width>16777215</width>
