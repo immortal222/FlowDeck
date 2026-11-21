@@ -1080,8 +1080,16 @@ QLabel#system_lbl_space5 {
     font-size: 12px;
 }
 
+/* ============================================================================
+   Footer / Status Bar
+   ============================================================================ */
 
-
+/* Status Bar */
+QStatusBar {
+    background-color: #1A1A1A;
+    border-top: 1px solid #474747;
+    color: #888888;
+}
 
 
 """
@@ -2011,6 +2019,15 @@ QLabel#system_lbl_space5 {
     font-size: 12px;
 }
 
+/* ============================================================================
+   Footer / Status Bar
+   ============================================================================ */
+   
+QStatusBar {
+    background-color: #E8E8E8;
+    border-top: 1px solid #CCCCCC;
+    color: #777777;
+}
 
 
 """

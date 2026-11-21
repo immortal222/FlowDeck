@@ -21,6 +21,7 @@ class UpdateCheckWorker(QThread):
     """
 
     app_checked = pyqtSignal(object)
+    progress = pyqtSignal(int, int, str)
     finished = pyqtSignal()
 
     def __init__(self, apps_list, db):
@@ -31,7 +32,8 @@ class UpdateCheckWorker(QThread):
 
     def run(self):
         """Executes the update check logic for each application in the provided list."""
-        logger.debug(f"Thread started. Processing {len(self.apps_list)} apps.")
+        total_apps = len(self.apps_list)
+        logger.debug(f"Thread started. Processing {total_apps} apps.")
 
         # Helper function defined once outside the loop for efficiency
         def normalize_version(value):
@@ -45,8 +47,10 @@ class UpdateCheckWorker(QThread):
                 text = text.removesuffix('.0')
             return text
 
-        for app in self.apps_list:
+        for index, app in enumerate(self.apps_list, start=1):
             name = app.get("name", "")
+            # Emit current progress before starting the network check
+            self.progress.emit(index, total_apps, name)
             source = app.get("source", "manual")
             url = app.get("update_url", "")
             install_method = app.get("install_method", "unknown")

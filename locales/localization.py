@@ -355,6 +355,7 @@ TRANSLATIONS = {
         "upd_not_found_text": "Ο έλεγχος ολοκληρώθηκε! Όλες οι εφαρμογές είναι ενημερωμένες.",
         "upd_title_error": "Σφάλμα Δικτύου",
         "upd_no_internet_text": "Αδυναμία σύνδεσης στο διαδίκτυο.\nΠαρακαλώ ελέγξτε τη σύνδεσή σας και δοκιμάστε ξανά.",
+        "upd_checking_progress": "Έλεγχος εκδόσεων... ({current}/{total}) \"{app_name}\"",
 
         # ------------------------------------------------------------------------#
         # --------------------------- Activity Manager ---------------------------#
@@ -846,6 +847,7 @@ TRANSLATIONS = {
         "upd_not_found_text": "Check completed! All applications are up to date.",
         "upd_title_error": "Network Error",
         "upd_no_internet_text": "No internet connection detected.\nPlease check your connection and try again.",
+        "upd_checking_progress": "Checking versions... ({current}/{total}) \"{app_name}\"",
 
         # ------------------------------------------------------------------------#
         # --------------------------- Activity Manager ---------------------------#

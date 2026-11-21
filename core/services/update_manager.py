@@ -179,8 +179,18 @@ class UpdateManager(QObject):
     def _start_worker(self, apps_list):
         self.update_worker = UpdateCheckWorker(apps_list, self.db)
         self.update_worker.app_checked.connect(self.track_updates)
+        self.update_worker.progress.connect(self._on_check_progress)
         self.update_worker.finished.connect(self.on_check_finished)
         self.update_worker.start()
+
+    def _on_check_progress(self, current, total, app_name):
+        """Updates the main window status bar with current check progress."""
+        if hasattr(self.main_window, 'ui') and hasattr(self.main_window.ui, 'statusbar'):
+            msg = _(
+                "upd_checking_progress",
+                'Checking versions... ({current}/{total}) "{app_name}"'
+            ).format(current=current, total=total, app_name=app_name)
+            self.main_window.ui.statusbar.showMessage(msg)
 
     def track_updates(self, update_result):
         """Monitors worker results and increments update counter."""
@@ -211,6 +221,9 @@ class UpdateManager(QObject):
     def on_check_finished(self):
         """Cleanup and UI notification upon thread completion."""
         self.status = "completed"
+
+        if hasattr(self.main_window, 'ui') and hasattr(self.main_window.ui, 'statusbar'):
+            self.main_window.ui.statusbar.clearMessage()
 
         if hasattr(self.main_window, 'my_apps_controller'):
             self.main_window.my_apps_controller.refresh_data()
